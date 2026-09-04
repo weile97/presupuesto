@@ -111,7 +111,7 @@ export default function App() {
   const [toCategory, setToCategory] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
 
-  // Estados para Gastos/Ingresos Recurrentes (Mejora 4)
+  // Estados para Gastos/Ingresos Recurrentes
   const [showRecurrentModal, setShowRecurrentModal] = useState(false);
   const [recConcept, setRecConcept] = useState("");
   const [recCategory, setRecCategory] = useState("");
@@ -309,7 +309,6 @@ export default function App() {
     }
   }
 
-  // --- MEJORA 3: GUARDAR / EDITAR / ELIMINAR TRANSACCIONES INDIVIDUALES ---
   function openAddTxModal() {
     setEditingTxId(null);
     setTxConcept("");
@@ -376,7 +375,6 @@ export default function App() {
       }
     }
 
-    // Validación de presupuesto sólo en ingresos hacia categoría
     if (txType === "income") {
       const previousAmount = editingTxId
         ? transactions.find((t) => t.id === editingTxId)?.amount || 0
@@ -422,7 +420,6 @@ export default function App() {
     setTxAmount("");
   }
 
-  // --- MEJORA 4: CREACIÓN Y APLICACIÓN DE GASTOS / INGRESOS RECURRENTES ---
   function addRecurrentRule() {
     const amt = parseFloat(recAmount.replace(",", "."));
     const day = parseInt(recDay, 10);
@@ -930,7 +927,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* MEJORA 4: SECCIÓN DE GASTOS / INGRESOS RECURRENTES MENSUALES */}
+        {/* Sección de Gastos / Ingresos Recurrentes Mensuales */}
         <section>
           <div className="section-header">
             <div className="section-title"><Calendar size={18} color="var(--yellow)" /> Automatización Recurrente Mensual</div>
