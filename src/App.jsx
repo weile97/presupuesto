@@ -169,12 +169,12 @@ export default function App() {
       .reduce((sum, t) => sum + (t.amount || 0), 0);
   }, [transactions]);
 
-  const totalAssignedToCategories = useMemo(() => {
-    return transactions
-      .filter((t) => t.categoryId && t.type === "income")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions]);
-
+// Ajuste en el cálculo de totalAssignedToCategories
+const totalAssignedToCategories = useMemo(() => {
+  return transactions
+    .filter((t) => t.categoryId && t.type === "income" && !t.concept.startsWith("Traspaso desde"))
+    .reduce((sum, t) => sum + (t.amount || 0), 0);
+}, [transactions]);
   const globalUnallocated = useMemo(() => {
     return totalBaseIncome - totalAssignedToCategories;
   }, [totalBaseIncome, totalAssignedToCategories]);
@@ -202,33 +202,33 @@ export default function App() {
     setCustomSalaryAmount(src.amount ? src.amount.toString() : "");
   }
 
-  function confirmSalaryDeposit() {
-    if (!depositSourceModal) return;
+function confirmSalaryDeposit() {
+  if (!depositSourceModal) return;
 
-    const amt = parseFloat(customSalaryAmount.replace(",", "."));
-    if (isNaN(amt) || amt <= 0) {
-      return showNotification("Ingresa un importe de nómina válido.", "error");
-    }
-
-    const newTx = {
-      id: uid(),
-      concept: `Cobro ${depositSourceModal.name}`,
-      categoryId: null,
-      sourceId: depositSourceModal.id,
-      type: "payroll_income",
-      amount: amt,
-      date: todayISO()
-    };
-
-    updateDataAndSave({
-      ...data,
-      transactions: [newTx, ...transactions]
-    });
-
-    showNotification(`Añadidos ${money(amt)} al Fondo General.`);
-    setDepositSourceModal(null);
-    setCustomSalaryAmount("");
+  const amt = parseFloat(customSalaryAmount.replace(",", "."));
+  if (isNaN(amt) || amt <= 0) {
+    return showNotification("Ingresa un importe de nómina válido.", "error");
   }
+
+  const newTx = {
+    id: uid(),
+    concept: `Nómina: ${depositSourceModal.name}`,
+    categoryId: null, // Asignado al Fondo General
+    sourceId: depositSourceModal.id,
+    type: "payroll_income",
+    amount: amt,
+    date: todayISO()
+  };
+
+  updateDataAndSave({
+    ...data,
+    transactions: [newTx, ...transactions]
+  });
+
+  showNotification(`Se han añadido ${money(amt)} al Fondo General.`);
+  setDepositSourceModal(null);
+  setCustomSalaryAmount("");
+}
 
   function addCategory() {
     const name = newCatName.trim();
@@ -540,7 +540,7 @@ export default function App() {
       concept: `Traspaso desde ${fromCat.name}`,
       categoryId: toCategory,
       sourceId: null,
-      type: "income",
+      type: "transfer_income", // Usar un tipo específico que no compute como asignación desde Fondo General
       amount: amt,
       date: todayISO()
     };
