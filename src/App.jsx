@@ -90,6 +90,13 @@ export default function App() {
   const [depositSourceModal, setDepositSourceModal] = useState(null);
   const [customSalaryAmount, setCustomSalaryAmount] = useState("");
 
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [editingSourceId, setEditingSourceId] = useState(null);
+  const [sourceName, setSourceName] = useState("");
+  const [sourceAmount, setSourceAmount] = useState("");
+  const [sourceIcon, setSourceIcon] = useState("banknote");
+  const [sourceColor, setSourceColor] = useState(PRESET_COLORS[0]);
+
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("wallet");
@@ -169,12 +176,12 @@ export default function App() {
       .reduce((sum, t) => sum + (t.amount || 0), 0);
   }, [transactions]);
 
-// Ajuste en el cálculo de totalAssignedToCategories
-const totalAssignedToCategories = useMemo(() => {
-  return transactions
-    .filter((t) => t.categoryId && t.type === "income" && !t.concept.startsWith("Traspaso desde"))
-    .reduce((sum, t) => sum + (t.amount || 0), 0);
-}, [transactions]);
+  const totalAssignedToCategories = useMemo(() => {
+    return transactions
+      .filter((t) => t.categoryId && t.type === "income")
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  }, [transactions]);
+
   const globalUnallocated = useMemo(() => {
     return totalBaseIncome - totalAssignedToCategories;
   }, [totalBaseIncome, totalAssignedToCategories]);
@@ -186,8 +193,8 @@ const totalAssignedToCategories = useMemo(() => {
     }
     for (const t of transactions) {
       if (!t.categoryId || !map[t.categoryId]) continue;
-      if (t.type === "income") map[t.categoryId].income += (t.amount || 0);
-      if (t.type === "expense") map[t.categoryId].expense += (t.amount || 0);
+      if (t.type === "income" || t.type === "transfer_income") map[t.categoryId].income += (t.amount || 0);
+      if (t.type === "expense" || t.type === "transfer_expense") map[t.categoryId].expense += (t.amount || 0);
     }
     for (const c of categories) {
       if (map[c.id]) {
@@ -197,39 +204,102 @@ const totalAssignedToCategories = useMemo(() => {
     return map;
   }, [categories, transactions]);
 
+  // Funciones de Nómina / Fuentes de Ingreso
   function openSalaryModal(src) {
     setDepositSourceModal(src);
     setCustomSalaryAmount(src.amount ? src.amount.toString() : "");
   }
 
-function confirmSalaryDeposit() {
-  if (!depositSourceModal) return;
+  function confirmSalaryDeposit() {
+    if (!depositSourceModal) return;
 
-  const amt = parseFloat(customSalaryAmount.replace(",", "."));
-  if (isNaN(amt) || amt <= 0) {
-    return showNotification("Ingresa un importe de nómina válido.", "error");
+    const amt = parseFloat(customSalaryAmount.replace(",", "."));
+    if (isNaN(amt) || amt <= 0) {
+      return showNotification("Ingresa un importe de nómina válido.", "error");
+    }
+
+    const newTx = {
+      id: uid(),
+      concept: `Nómina: ${depositSourceModal.name}`,
+      categoryId: null,
+      sourceId: depositSourceModal.id,
+      type: "payroll_income",
+      amount: amt,
+      date: todayISO()
+    };
+
+    updateDataAndSave({
+      ...data,
+      transactions: [newTx, ...transactions]
+    });
+
+    showNotification(`Se han añadido ${money(amt)} al Fondo General.`);
+    setDepositSourceModal(null);
+    setCustomSalaryAmount("");
   }
 
-  const newTx = {
-    id: uid(),
-    concept: `Nómina: ${depositSourceModal.name}`,
-    categoryId: null, // Asignado al Fondo General
-    sourceId: depositSourceModal.id,
-    type: "payroll_income",
-    amount: amt,
-    date: todayISO()
-  };
+  function openAddSourceModal() {
+    setEditingSourceId(null);
+    setSourceName("");
+    setSourceAmount("");
+    setSourceIcon("banknote");
+    setSourceColor(PRESET_COLORS[0]);
+    setShowAddSourceModal(true);
+  }
 
-  updateDataAndSave({
-    ...data,
-    transactions: [newTx, ...transactions]
-  });
+  function openEditSourceModal(src, e) {
+    e.stopPropagation();
+    setEditingSourceId(src.id);
+    setSourceName(src.name);
+    setSourceAmount(src.amount ? src.amount.toString() : "");
+    setSourceIcon(src.icon || "banknote");
+    setSourceColor(src.color || PRESET_COLORS[0]);
+    setShowAddSourceModal(true);
+  }
 
-  showNotification(`Se han añadido ${money(amt)} al Fondo General.`);
-  setDepositSourceModal(null);
-  setCustomSalaryAmount("");
-}
+  function saveSource() {
+    const name = sourceName.trim();
+    const amt = parseFloat(sourceAmount.replace(",", "."));
+    if (!name || isNaN(amt) || amt < 0) {
+      return showNotification("Ingresa un nombre e importe de referencia válidos.", "error");
+    }
 
+    if (editingSourceId) {
+      const updatedSources = sources.map((s) =>
+        s.id === editingSourceId
+          ? { ...s, name, amount: amt, icon: sourceIcon, color: sourceColor }
+          : s
+      );
+      updateDataAndSave({ ...data, sources: updatedSources });
+      showNotification("Fuente de nómina actualizada.");
+    } else {
+      const newSource = {
+        id: uid(),
+        name,
+        amount: amt,
+        icon: sourceIcon,
+        color: sourceColor
+      };
+      updateDataAndSave({ ...data, sources: [...sources, newSource] });
+      showNotification("Fuente de nómina añadida.");
+    }
+
+    setShowAddSourceModal(false);
+    setEditingSourceId(null);
+  }
+
+  function deleteSource(srcId, e) {
+    e.stopPropagation();
+    if (window.confirm("¿Eliminar esta fuente de nómina?")) {
+      updateDataAndSave({
+        ...data,
+        sources: sources.filter((s) => s.id !== srcId)
+      });
+      showNotification("Fuente de nómina eliminada.");
+    }
+  }
+
+  // Funciones de Categorías
   function addCategory() {
     const name = newCatName.trim();
     if (!name) return showNotification("Ingresa un nombre para la categoría.", "error");
@@ -308,6 +378,7 @@ function confirmSalaryDeposit() {
     }
   }
 
+  // Funciones de Transacciones
   function openAddTxModal() {
     setEditingTxId(null);
     setTxConcept("");
@@ -423,6 +494,7 @@ function confirmSalaryDeposit() {
     setTxAmount("");
   }
 
+  // Recurrentes
   function addRecurrentRule() {
     const amt = parseFloat(recAmount.replace(",", "."));
     const day = parseInt(recDay, 10);
@@ -498,6 +570,7 @@ function confirmSalaryDeposit() {
     showNotification(`Se aplicaron ${appliedCount} cargos/ingresos recurrentes.`);
   }
 
+  // Traspasos entre categorías
   function handleTransferBetweenCategories() {
     const amt = parseFloat(transferAmount.replace(",", "."));
     if (!fromCategory || !toCategory || isNaN(amt) || amt <= 0) {
@@ -530,7 +603,7 @@ function confirmSalaryDeposit() {
       concept: `Traspaso ➔ ${toCat.name}`,
       categoryId: fromCategory,
       sourceId: null,
-      type: "expense",
+      type: "transfer_expense",
       amount: amt,
       date: todayISO()
     };
@@ -540,7 +613,7 @@ function confirmSalaryDeposit() {
       concept: `Traspaso desde ${fromCat.name}`,
       categoryId: toCategory,
       sourceId: null,
-      type: "transfer_income", // Usar un tipo específico que no compute como asignación desde Fondo General
+      type: "transfer_income",
       amount: amt,
       date: todayISO()
     };
@@ -714,12 +787,54 @@ function confirmSalaryDeposit() {
         <section>
           <div className="section-header">
             <div className="section-title"><CreditCard size={18} color="var(--pink-primary)" /> Ingresos de Nómina</div>
+            <button className="btn-primary" onClick={openAddSourceModal}><Plus size={15} /> Nueva Fuente de Nómina</button>
           </div>
+
+          {showAddSourceModal && (
+            <div className="form-box">
+              <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>
+                {editingSourceId ? "Editar Fuente de Nómina" : "Añadir Fuente de Nómina"}
+              </h3>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Nombre / Concepto</label>
+                  <input type="text" value={sourceName} onChange={(e) => setSourceName(e.target.value)} placeholder="Ej. Empresa X, Trabajo Freelance" />
+                </div>
+                <div className="field">
+                  <label>Importe de Ref. (€)</label>
+                  <input type="number" value={sourceAmount} onChange={(e) => setSourceAmount(e.target.value)} placeholder="Ej. 1800" />
+                </div>
+                <div className="field">
+                  <label>Color</label>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    {PRESET_COLORS.map(c => (
+                      <div 
+                        key={c} 
+                        onClick={() => setSourceColor(c)}
+                        style={{ 
+                          width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                          border: sourceColor === c ? "2px solid white" : "none"
+                        }} 
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Icono</label>
+                  <IconPicker icons={SRC_ICONS} order={Object.keys(SRC_ICONS)} value={sourceIcon} onChange={setSourceIcon} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button className="btn-primary" onClick={saveSource}><Check size={15} /> Guardar Fuente</button>
+                <button className="btn-secondary" onClick={() => setShowAddSourceModal(false)}>Cancelar</button>
+              </div>
+            </div>
+          )}
 
           {depositSourceModal && (
             <div className="form-box">
               <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>
-                Ingresar Nómina Variable: {depositSourceModal.name}
+                Ingresar Nómina: {depositSourceModal.name}
               </h3>
               <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px" }}>
                 Introduce la cantidad exacta cobrada en este periodo:
@@ -750,8 +865,12 @@ function confirmSalaryDeposit() {
                 <div className="card" key={s.id}>
                   <div className="card-top">
                     <div className="card-icon" style={{ background: s.color }}><Icon size={18} /></div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)" }}>{s.name}</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn-icon" onClick={(e) => openEditSourceModal(s, e)}><Edit2 size={14} /></button>
+                      <button className="btn-icon" onClick={(e) => deleteSource(s.id, e)}><X size={14} /></button>
+                    </div>
                   </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{s.name}</div>
                   <div style={{ marginBottom: 14, fontSize: 12, color: "var(--text-muted)" }}>
                     Estimado / Ref: <strong style={{ color: "white" }}>{money(s.amount)}</strong>
                   </div>
@@ -904,7 +1023,7 @@ function confirmSalaryDeposit() {
                     {isLocked ? "••••••" : money(stats.balance)}
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
+                  <div style={{ display: "flex", justifyBetween: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
                     <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
                       + {isLocked ? "•••" : money(stats.income)}
                     </span>
@@ -1085,6 +1204,7 @@ function confirmSalaryDeposit() {
                 const cat = categories.find((c) => c.id === t.categoryId);
                 const Icon = cat ? (CAT_ICONS[cat.icon] || Wallet) : Wallet;
                 const catBgColor = cat?.color || "#1E293B";
+                const isExpense = t.type === "expense" || t.type === "transfer_expense";
 
                 return (
                   <div className="tx-item" key={t.id}>
@@ -1101,8 +1221,8 @@ function confirmSalaryDeposit() {
                       </div>
                     </div>
                     <div className="tx-right">
-                      <div className={`tx-amount ${t.type === "expense" ? "expense" : "income"}`}>
-                        {t.type === "expense" ? "-" : "+"}{money(t.amount)}
+                      <div className={`tx-amount ${isExpense ? "expense" : "income"}`}>
+                        {isExpense ? "-" : "+"}{money(t.amount)}
                       </div>
                       <button className="btn-icon" onClick={(e) => openEditTxModal(t, e)} title="Editar movimiento">
                         <Edit2 size={15} />
