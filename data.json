@@ -1,0 +1,186 @@
+{
+  "lastActiveMonth": "2026-09",
+  "sources": [
+    {
+      "id": "src-josna",
+      "name": "Nómina Josna",
+      "icon": "banknote",
+      "color": "#3B82F6",
+      "amount": 1100
+    },
+    {
+      "id": "src-meli",
+      "name": "Nómina Meli",
+      "icon": "piggy",
+      "color": "#EC4899",
+      "amount": 1300
+    },
+    {
+      "id": "src-propinas",
+      "name": "Propinas Meli 🍸",
+      "icon": "coins",
+      "color": "#F59E0B",
+      "amount": 0
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-mascotas",
+      "name": "Mascotas",
+      "icon": "paw",
+      "color": "#10B981",
+      "hasPin": false,
+      "pin": "",
+      "initialBalance": 0
+    },
+    {
+      "id": "cat-comida",
+      "name": "Alimentación",
+      "icon": "food",
+      "color": "#F59E0B",
+      "hasPin": false,
+      "pin": "",
+      "initialBalance": 0
+    },
+    {
+      "id": "cat-propinas",
+      "name": "Ocio & Extras",
+      "icon": "coins",
+      "color": "#8B5CF6",
+      "hasPin": false,
+      "pin": "",
+      "initialBalance": 0
+    },
+    {
+      "id": "cat-imprevistos",
+      "name": "Fondo Emergencia",
+      "icon": "alert",
+      "color": "#EF4444",
+      "hasPin": true,
+      "pin": "1234",
+      "initialBalance": 0
+    },
+    {
+      "id": "mtmac3lvqwvbof",
+      "name": "Regalo navidad",
+      "icon": "wallet",
+      "color": "#EC4899",
+      "hasPin": true,
+      "pinHash": "dGVzdA==",
+      "pin": "test",
+      "targetGoal": 2000,
+      "initialBalance": 0
+    }
+  ],
+  "transactions": [
+    {
+      "id": "mtmag8dw7idft1",
+      "concept": "test",
+      "categoryId": "cat-propinas",
+      "sourceId": null,
+      "type": "expense",
+      "amount": 89,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtmad1hq2ehqkm",
+      "concept": "Meli",
+      "categoryId": "mtmac3lvqwvbof",
+      "sourceId": null,
+      "type": "income",
+      "amount": 1000,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtmab64k31no09",
+      "concept": "Ropa",
+      "categoryId": "cat-propinas",
+      "sourceId": null,
+      "type": "expense",
+      "amount": 60,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtmaakhpu5kmb7",
+      "concept": "Medicina",
+      "categoryId": "cat-imprevistos",
+      "sourceId": null,
+      "type": "expense",
+      "amount": 20,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtmaa05awcki6r",
+      "concept": "Imprevisto",
+      "categoryId": "cat-imprevistos",
+      "sourceId": null,
+      "type": "income",
+      "amount": 300,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtma5k9iwxfg0b",
+      "concept": "pienso",
+      "categoryId": "cat-mascotas",
+      "sourceId": null,
+      "type": "expense",
+      "amount": 30,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtma4838gw4dhy",
+      "concept": "Salidas",
+      "categoryId": "cat-propinas",
+      "sourceId": null,
+      "type": "income",
+      "amount": 150,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtma3zjbmn63ic",
+      "concept": "Chuches",
+      "categoryId": "cat-comida",
+      "sourceId": null,
+      "type": "income",
+      "amount": 30,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtma3r33gvwd7y",
+      "concept": "Despensa",
+      "categoryId": "cat-comida",
+      "sourceId": null,
+      "type": "income",
+      "amount": 150,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtm9xrc8be2ea4",
+      "concept": "Pienso",
+      "categoryId": "cat-mascotas",
+      "sourceId": null,
+      "type": "income",
+      "amount": 50,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtm9wf6yqru150",
+      "concept": "Cobro Nómina Meli",
+      "categoryId": null,
+      "sourceId": "src-meli",
+      "type": "payroll_income",
+      "amount": 1300,
+      "date": "2026-09-04"
+    },
+    {
+      "id": "mtm9we0cz9bxpc",
+      "concept": "Cobro Nómina Josna",
+      "categoryId": null,
+      "sourceId": "src-josna",
+      "type": "payroll_income",
+      "amount": 1100,
+      "date": "2026-09-04"
+    }
+  ],
+  "generalFund": 2350
+}
