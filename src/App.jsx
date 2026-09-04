@@ -6,7 +6,7 @@ import {
   PieChart, Download, Search, Trash2, X, Edit2, RefreshCw, Calendar
 } from "lucide-react";
 
-const API_URL = "http://localhost:3001/api/data";
+const API_URL = "/api/data";
 
 const CAT_ICONS = {
   paw: PawPrint, food: UtensilsCrossed, alert: AlertTriangle, home: Home,
