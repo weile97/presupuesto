@@ -102,7 +102,7 @@ export default function App() {
   const [editingTxId, setEditingTxId] = useState(null);
   const [txConcept, setTxConcept] = useState("");
   const [txCategory, setTxCategory] = useState("");
-  const [txType, setTxType] = useState("income");
+  const [txType, setTxType] = useState("payroll_income");
   const [txAmount, setTxAmount] = useState("");
   const [txDate, setTxDate] = useState(todayISO());
 
@@ -111,7 +111,6 @@ export default function App() {
   const [toCategory, setToCategory] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
 
-  // Estados para Gastos/Ingresos Recurrentes
   const [showRecurrentModal, setShowRecurrentModal] = useState(false);
   const [recConcept, setRecConcept] = useState("");
   const [recCategory, setRecCategory] = useState("");
@@ -313,7 +312,7 @@ export default function App() {
     setEditingTxId(null);
     setTxConcept("");
     setTxCategory("");
-    setTxType("income");
+    setTxType("payroll_income");
     setTxAmount("");
     setTxDate(todayISO());
     setShowAddTx(true);
@@ -362,13 +361,15 @@ export default function App() {
 
   function saveTransaction() {
     const amt = parseFloat(txAmount.replace(",", "."));
-    if (!txConcept.trim() || isNaN(amt) || amt <= 0 || !txCategory) {
+    const isPayroll = txType === "payroll_income";
+
+    if (!txConcept.trim() || isNaN(amt) || amt <= 0 || (!isPayroll && !txCategory)) {
       return showNotification("Completa todos los campos correctamente.", "error");
     }
 
     const selectedCat = categories.find((c) => c.id === txCategory);
 
-    if (selectedCat?.hasPin && !unlockedCats[selectedCat.id]) {
+    if (!isPayroll && selectedCat?.hasPin && !unlockedCats[selectedCat.id]) {
       const pinEntered = prompt(`PIN requerido para "${selectedCat.name}":`);
       if (!pinEntered || (hashPin(pinEntered) !== selectedCat.pinHash && pinEntered !== selectedCat.pin)) {
         return showNotification("Contraseña incorrecta.", "error");
@@ -384,13 +385,15 @@ export default function App() {
       }
     }
 
+    const targetCategory = isPayroll ? null : txCategory;
+
     if (editingTxId) {
       const updatedTxs = transactions.map((t) => {
         if (t.id === editingTxId) {
           return {
             ...t,
             concept: txConcept.trim(),
-            categoryId: txCategory,
+            categoryId: targetCategory,
             type: txType,
             amount: amt,
             date: txDate || todayISO()
@@ -404,7 +407,7 @@ export default function App() {
       const newTx = {
         id: uid(),
         concept: txConcept.trim(),
-        categoryId: txCategory,
+        categoryId: targetCategory,
         sourceId: null,
         type: txType,
         amount: amt,
@@ -1037,20 +1040,23 @@ export default function App() {
                 <div className="field">
                   <label>Tipo</label>
                   <select value={txType} onChange={(e) => setTxType(e.target.value)}>
+                    <option value="payroll_income">Ingreso de Nómina (Fondo General)</option>
                     <option value="income">Asignar Fondo General ➔ Categoría (+)</option>
                     <option value="expense">Gasto de Categoría (-)</option>
                   </select>
                 </div>
-                <div className="field">
-                  <label>Categoría</label>
-                  <select value={txCategory} onChange={(e) => setTxCategory(e.target.value)}>
-                    <option value="">Selecciona...</option>
-                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name} {c.hasPin ? "🔒" : ""}</option>)}
-                  </select>
-                </div>
+                {txType !== "payroll_income" && (
+                  <div className="field">
+                    <label>Categoría</label>
+                    <select value={txCategory} onChange={(e) => setTxCategory(e.target.value)}>
+                      <option value="">Selecciona...</option>
+                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name} {c.hasPin ? "🔒" : ""}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="field">
                   <label>Concepto</label>
-                  <input type="text" value={txConcept} onChange={(e) => setTxConcept(e.target.value)} />
+                  <input type="text" value={txConcept} onChange={(e) => setTxConcept(e.target.value)} placeholder="Ej. Nómina Septiembre" />
                 </div>
                 <div className="field">
                   <label>Monto (€)</label>
