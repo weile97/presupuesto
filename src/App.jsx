@@ -251,15 +251,23 @@ export default function App() {
     }
   }, []);
 
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
     fetch(API_URL)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((dataFromFile) => {
         setData(dataFromFile || {});
         setLoading(false);
       })
       .catch((err) => {
         console.error("Error cargando base de datos:", err);
+        // Importante: NO ponemos data en un objeto vacío. Si el servidor falla,
+        // mostramos un aviso claro en vez de dar la impresión de que se han borrado los datos.
+        setLoadError(true);
         setLoading(false);
       });
   }, []);
@@ -292,7 +300,10 @@ export default function App() {
 
     const interval = setInterval(() => {
       fetch(API_URL)
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        })
         .then((remote) => {
           if (!remote || !remote.lastEditedAt) return;
           if (remote.lastEditedBy === DEVICE_ID) return; // cambio propio, ya lo tenemos
@@ -954,6 +965,22 @@ export default function App() {
   }, [transactions, categories, unlockedCats, selectedCatFilter, searchQuery, dateRangeFilter]);
 
   if (loading) return <div className="loading-screen">Cargando datos...</div>;
+
+  if (loadError && !data) {
+    return (
+      <div className="loading-screen">
+        ⚠️ No se han podido cargar los datos del servidor.
+        <br />
+        <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>
+          Esto normalmente es un problema temporal de conexión o del servidor — tus datos guardados no se han borrado.
+        </span>
+        <br /><br />
+        <button className="btn-primary" style={{ margin: "0 auto" }} onClick={() => window.location.reload()}>
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
