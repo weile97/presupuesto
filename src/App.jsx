@@ -4,54 +4,33 @@ import {
   Plane, Gift, Heart, Wallet, Plus, Check, Banknote, PiggyBank,
   Coins, Lock, Eye, EyeOff, ArrowRightLeft, TrendingUp, CreditCard,
   PieChart, Download, Search, Trash2, X, Edit2, RefreshCw, Calendar,
-  Building2, Landmark, Receipt, Target, Sparkles, ShieldCheck,
-  Vault, ArrowLeft, ArrowRight, Zap, Settings, DollarSign, KeyRound
+  Landmark, GripVertical, Sparkles, Umbrella, GraduationCap,
+  Dumbbell, Baby, Shirt, Smartphone, LayoutGrid, Layers, Settings2,
+  History
 } from "lucide-react";
 
 const API_URL = "/api/data";
 
-// 🌟 Catálogo Extendido de Stickers (Ahorro, Bancos y Categorías)
 const CAT_ICONS = {
-  // Ahorro e Inversiones
-  piggy: PiggyBank,
-  vault: Vault,
-  trending: TrendingUp,
-  target: Target,
-  sparkles: Sparkles,
-  shield: ShieldCheck,
-  coins: Coins,
-  wallet: Wallet,
-  banknote: Banknote,
-  dollar: DollarSign,
-  
-  // Bancos y Gestión
-  bank: Building2,
-  landmark: Landmark,
-  card: CreditCard,
-  receipt: Receipt,
-  key: KeyRound,
-  
-  // Vida y Gastos Diario
-  home: Home,
-  food: UtensilsCrossed,
-  car: Car,
-  bag: ShoppingBag,
-  plane: Plane,
-  gift: Gift,
-  heart: Heart,
-  paw: PawPrint,
-  alert: AlertTriangle
+  paw: PawPrint, food: UtensilsCrossed, alert: AlertTriangle, home: Home,
+  car: Car, bag: ShoppingBag, plane: Plane, gift: Gift, heart: Heart, wallet: Wallet, coins: Coins,
+  piggy: PiggyBank, bank: Landmark, sparkle: Sparkles, umbrella: Umbrella,
+  study: GraduationCap, gym: Dumbbell, baby: Baby, clothes: Shirt, phone: Smartphone
 };
+const CAT_ICON_ORDER = [
+  "paw", "food", "alert", "home", "car", "bag", "plane", "gift", "heart", "wallet", "coins",
+  "piggy", "bank", "sparkle", "umbrella", "study", "gym", "baby", "clothes", "phone"
+];
+const SRC_ICONS = { banknote: Banknote, piggy: PiggyBank, wallet: Wallet, gift: Gift, coins: Coins, bank: Landmark };
 
-const CAT_ICON_ORDER = Object.keys(CAT_ICONS);
-const SRC_ICONS = { banknote: Banknote, piggy: PiggyBank, wallet: Wallet, gift: Gift, coins: Coins, bank: Building2, card: CreditCard };
-
-// 🎨 Paleta Extendida de Colores Vivaces
 const PRESET_COLORS = [
-  "#EC4899", "#8B5CF6", "#3B82F6", "#10B981",
-  "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
-  "#6366F1", "#D946EF", "#F97316", "#14B8A6",
-  "#2DD4BF", "#A855F7", "#4ADE80", "#F43F5E"
+  "#F472B6", "#EC4899", "#DB2777", "#F9A8D4", "#FBCFE8", "#E879F9",
+  "#D946EF", "#C084FC", "#A855F7", "#8B5CF6", "#7C3AED", "#818CF8",
+  "#6366F1", "#4F46E5", "#3B82F6", "#2563EB", "#60A5FA", "#38BDF8",
+  "#0EA5E9", "#22D3EE", "#2DD4BF", "#14B8A6", "#10B981", "#059669",
+  "#34D399", "#A3E635", "#84CC16", "#BEF264", "#FACC15", "#EAB308",
+  "#F59E0B", "#FB923C", "#F97316", "#EA580C", "#F87171", "#EF4444",
+  "#DC2626", "#7C2D12", "#78350F", "#64748B"
 ];
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -69,7 +48,7 @@ const isLightColor = (hex) => {
   const g = (rgb >> 8) & 0xff;
   const b = (rgb >> 0) & 0xff;
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luma > 140;
+  return luma > 128;
 };
 
 const money = (n) =>
@@ -82,7 +61,6 @@ function IconPicker({ icons, order, value, onChange }) {
     <div className="icon-pick">
       {order.map((key) => {
         const Ico = icons[key];
-        if (!Ico) return null;
         return (
           <button
             key={key}
@@ -94,6 +72,22 @@ function IconPicker({ icons, order, value, onChange }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function ColorPicker({ value, onChange }) {
+  return (
+    <div className="color-grid">
+      {PRESET_COLORS.map((c) => (
+        <div
+          key={c}
+          onClick={() => onChange(c)}
+          className={`color-swatch ${value === c ? "active" : ""}`}
+          style={{ background: c }}
+          title={c}
+        />
+      ))}
     </div>
   );
 }
@@ -116,17 +110,15 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Estados Visuales y Controles
   const [unlockedCats, setUnlockedCats] = useState({});
   const [selectedCatFilter, setSelectedCatFilter] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const [toast, setToast] = useState(null);
-  const [isEditMode, setIsEditMode] = useState(false); // Modo Edición Habilitable
 
-  // Modales y Formulario Nóminas
   const [depositSourceModal, setDepositSourceModal] = useState(null);
   const [customSalaryAmount, setCustomSalaryAmount] = useState("");
+
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [editingSourceId, setEditingSourceId] = useState(null);
   const [sourceName, setSourceName] = useState("");
@@ -134,21 +126,25 @@ export default function App() {
   const [sourceIcon, setSourceIcon] = useState("banknote");
   const [sourceColor, setSourceColor] = useState(PRESET_COLORS[0]);
 
-  // Modales y Formulario Categorías (Creación / Edición)
   const [showAddCategory, setShowAddCategory] = useState(false);
-  const [editingCatId, setEditingCatId] = useState(null);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("wallet");
   const [newCatColor, setNewCatColor] = useState(PRESET_COLORS[0]);
   const [newCatHasPin, setNewCatHasPin] = useState(false);
   const [newCatPin, setNewCatPin] = useState("");
   const [newCatGoal, setNewCatGoal] = useState("");
+  const [catAdjustAmount, setCatAdjustAmount] = useState("");
 
-  // Modal Ajuste de Saldo Manual
-  const [showAdjustBalanceModal, setShowAdjustBalanceModal] = useState(null);
-  const [adjustedBalanceValue, setAdjustedBalanceValue] = useState("");
+  const [viewingCategoryId, setViewingCategoryId] = useState(null);
+  const [dragCatId, setDragCatId] = useState(null);
+  const [dragOverCatId, setDragOverCatId] = useState(null);
+  const [catViewMode, setCatViewMode] = useState("stack"); // "grid" | "stack"
+  const [stackEditMode, setStackEditMode] = useState(false);
 
-  // Formulario Transacciones
+  const [showBulkPayroll, setShowBulkPayroll] = useState(false);
+  const [bulkAmounts, setBulkAmounts] = useState({});
+
   const [showAddTx, setShowAddTx] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
   const [txConcept, setTxConcept] = useState("");
@@ -157,13 +153,11 @@ export default function App() {
   const [txAmount, setTxAmount] = useState("");
   const [txDate, setTxDate] = useState(todayISO());
 
-  // Traspasos entre Sobres
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [fromCategory, setFromCategory] = useState("");
   const [toCategory, setToCategory] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
 
-  // Automatizaciones Recurrentes
   const [showRecurrentModal, setShowRecurrentModal] = useState(false);
   const [recConcept, setRecConcept] = useState("");
   const [recCategory, setRecCategory] = useState("");
@@ -194,7 +188,7 @@ export default function App() {
 
     const timer = setTimeout(() => {
       setUnlockedCats({});
-      showNotification("Protección activada: Categorías con PIN bloqueadas.", "error");
+      showNotification("Protección activada: Categorías bloqueadas.", "error");
     }, 60000);
 
     return () => clearTimeout(timer);
@@ -215,7 +209,7 @@ export default function App() {
   const recurrents = data?.recurrents || [];
   const lastActiveMonth = data?.lastActiveMonth || currentMonthYear();
 
-  // Cálculos de balances
+  // Balances
   const totalBaseIncome = useMemo(() => {
     return transactions
       .filter((t) => t.type === "payroll_income")
@@ -239,8 +233,8 @@ export default function App() {
     }
     for (const t of transactions) {
       if (!t.categoryId || !map[t.categoryId]) continue;
-      if (t.type === "income" || t.type === "transfer_income") map[t.categoryId].income += (t.amount || 0);
-      if (t.type === "expense" || t.type === "transfer_expense") map[t.categoryId].expense += (t.amount || 0);
+      if (t.type === "income" || t.type === "transfer_income" || t.type === "adjustment_income") map[t.categoryId].income += (t.amount || 0);
+      if (t.type === "expense" || t.type === "transfer_expense" || t.type === "adjustment_expense") map[t.categoryId].expense += (t.amount || 0);
     }
     for (const c of categories) {
       if (map[c.id]) {
@@ -250,27 +244,7 @@ export default function App() {
     return map;
   }, [categories, transactions]);
 
-  // 💳 SISTEMA DE NÓMINAS SIMPLIFICADO E INTUITIVO
-  function quickDepositSalary(src) {
-    if (!src.amount || src.amount <= 0) {
-      return openSalaryModal(src);
-    }
-    const newTx = {
-      id: uid(),
-      concept: `Nómina: ${src.name}`,
-      categoryId: null,
-      sourceId: src.id,
-      type: "payroll_income",
-      amount: parseFloat(src.amount),
-      date: todayISO()
-    };
-    updateDataAndSave({
-      ...data,
-      transactions: [newTx, ...transactions]
-    });
-    showNotification(`⚡ Ingresados ${money(src.amount)} de ${src.name} al Fondo General.`);
-  }
-
+  // Funciones de Nómina / Fuentes de Ingreso
   function openSalaryModal(src) {
     setDepositSourceModal(src);
     setCustomSalaryAmount(src.amount ? src.amount.toString() : "");
@@ -304,20 +278,44 @@ export default function App() {
     setCustomSalaryAmount("");
   }
 
-  function confirmAllSalariesDeposit() {
+  function openBulkPayrollModal() {
     if (sources.length === 0) {
       return showNotification("No hay fuentes de nómina configuradas.", "error");
     }
+    const initial = {};
+    sources.forEach((s) => { initial[s.id] = s.amount ? s.amount.toString() : ""; });
+    setBulkAmounts(initial);
+    setShowBulkPayroll(true);
+  }
 
-    const newTransactions = sources.map((src) => ({
-      id: uid(),
-      concept: `Nómina: ${src.name}`,
-      categoryId: null,
-      sourceId: src.id,
-      type: "payroll_income",
-      amount: parseFloat(src.amount) || 0,
-      date: todayISO()
-    }));
+  function lastPayrollFor(sourceId) {
+    const txs = transactions
+      .filter((t) => t.type === "payroll_income" && t.sourceId === sourceId)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    return txs[0] || null;
+  }
+
+  function confirmBulkPayroll() {
+    const newTransactions = [];
+    for (const src of sources) {
+      const raw = (bulkAmounts[src.id] || "").toString().replace(",", ".");
+      const amt = parseFloat(raw);
+      if (!isNaN(amt) && amt > 0) {
+        newTransactions.push({
+          id: uid(),
+          concept: `Nómina: ${src.name}`,
+          categoryId: null,
+          sourceId: src.id,
+          type: "payroll_income",
+          amount: amt,
+          date: todayISO()
+        });
+      }
+    }
+
+    if (newTransactions.length === 0) {
+      return showNotification("Introduce al menos un importe válido para registrar.", "error");
+    }
 
     const totalAdded = newTransactions.reduce((acc, t) => acc + t.amount, 0);
 
@@ -326,7 +324,9 @@ export default function App() {
       transactions: [...newTransactions, ...transactions]
     });
 
-    showNotification(`Se han añadido ${money(totalAdded)} al Fondo General de las nóminas.`);
+    showNotification(`Se han añadido ${money(totalAdded)} al Fondo General.`);
+    setShowBulkPayroll(false);
+    setBulkAmounts({});
   }
 
   function openAddSourceModal() {
@@ -339,7 +339,7 @@ export default function App() {
   }
 
   function openEditSourceModal(src, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     setEditingSourceId(src.id);
     setSourceName(src.name);
     setSourceAmount(src.amount ? src.amount.toString() : "");
@@ -380,7 +380,7 @@ export default function App() {
   }
 
   function deleteSource(srcId, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     if (window.confirm("¿Eliminar esta fuente de nómina?")) {
       updateDataAndSave({
         ...data,
@@ -390,46 +390,31 @@ export default function App() {
     }
   }
 
-  // 📁 GESTIÓN Y REORDENACIÓN DE CATEGORÍAS
-  function moveCategoryOrder(index, direction, e) {
-    if (e) e.stopPropagation();
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= categories.length) return;
-
-    const updatedCategories = [...categories];
-    const [movedCat] = updatedCategories.splice(index, 1);
-    updatedCategories.splice(newIndex, 0, movedCat);
-
-    updateDataAndSave({ ...data, categories: updatedCategories });
-  }
-
-  function openCreateCategoryModal() {
-    setEditingCatId(null);
-    setNewCatName("");
-    setNewCatIcon("wallet");
-    setNewCatColor(PRESET_COLORS[0]);
-    setNewCatHasPin(false);
-    setNewCatPin("");
-    setNewCatGoal("");
+  // Funciones de Categorías
+  function openAddCategoryModal() {
+    setEditingCategoryId(null);
+    setNewCatName(""); setNewCatIcon("wallet"); setNewCatColor(PRESET_COLORS[0]);
+    setNewCatHasPin(false); setNewCatPin(""); setNewCatGoal("");
+    setCatAdjustAmount("");
     setShowAddCategory(true);
   }
 
   function openEditCategoryModal(cat, e) {
     if (e) e.stopPropagation();
-    if (cat.hasPin && !unlockedCats[cat.id]) {
-      const pinEntered = prompt(`PIN para editar "${cat.name}":`);
+    if (cat?.hasPin && !unlockedCats[cat.id]) {
+      const pinEntered = prompt(`PIN requerido para editar "${cat.name}":`);
       if (!pinEntered || (hashPin(pinEntered) !== cat.pinHash && pinEntered !== cat.pin)) {
-        return showNotification("PIN incorrecto.", "error");
+        return showNotification("Contraseña incorrecta.", "error");
       }
     }
-
-    setEditingCatId(cat.id);
+    setEditingCategoryId(cat.id);
     setNewCatName(cat.name);
     setNewCatIcon(cat.icon || "wallet");
     setNewCatColor(cat.color || PRESET_COLORS[0]);
     setNewCatHasPin(!!cat.hasPin);
     setNewCatPin(cat.pin || "");
     setNewCatGoal(cat.targetGoal ? cat.targetGoal.toString() : "");
+    setCatAdjustAmount("");
     setShowAddCategory(true);
   }
 
@@ -440,24 +425,23 @@ export default function App() {
 
     const goalParsed = parseFloat(newCatGoal.replace(",", "."));
 
-    if (editingCatId) {
-      const updatedCats = categories.map((c) => {
-        if (c.id === editingCatId) {
-          return {
-            ...c,
-            name,
-            icon: newCatIcon,
-            color: newCatColor,
-            hasPin: newCatHasPin,
-            pinHash: newCatHasPin ? hashPin(newCatPin) : "",
-            pin: newCatHasPin ? newCatPin.trim() : "",
-            targetGoal: isNaN(goalParsed) ? 0 : goalParsed
-          };
-        }
-        return c;
-      });
+    if (editingCategoryId) {
+      const updatedCats = categories.map((c) =>
+        c.id === editingCategoryId
+          ? {
+              ...c,
+              name,
+              icon: newCatIcon,
+              color: newCatColor,
+              hasPin: newCatHasPin,
+              pinHash: newCatHasPin ? hashPin(newCatPin) : "",
+              pin: newCatHasPin ? newCatPin.trim() : "",
+              targetGoal: isNaN(goalParsed) ? 0 : goalParsed
+            }
+          : c
+      );
       updateDataAndSave({ ...data, categories: updatedCats });
-      showNotification("Categoría modificada con éxito.");
+      showNotification("Sobre actualizado.");
     } else {
       const newCat = {
         id: uid(),
@@ -474,58 +458,46 @@ export default function App() {
       showNotification("Categoría creada con éxito.");
     }
 
-    setShowAddCategory(false);
-    setEditingCatId(null);
+    setNewCatName(""); setNewCatIcon("wallet"); setNewCatColor(PRESET_COLORS[0]); setNewCatHasPin(false); setNewCatPin(""); setNewCatGoal("");
+    setShowAddCategory(false); setEditingCategoryId(null); setCatAdjustAmount("");
   }
 
-  // ✏️ AJUSTAR DINERO MANUAL DE CADA CATEGORÍA SIN AFECTAR AL GLOBAL
-  function openAdjustBalanceModal(cat, e) {
-    if (e) e.stopPropagation();
-    if (cat.hasPin && !unlockedCats[cat.id]) {
-      const pinEntered = prompt(`PIN para ajustar saldo de "${cat.name}":`);
-      if (!pinEntered || (hashPin(pinEntered) !== cat.pinHash && pinEntered !== cat.pin)) {
-        return showNotification("PIN incorrecto.", "error");
-      }
+  function applyCategoryAdjustment(catId) {
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const amt = parseFloat(catAdjustAmount.replace(",", "."));
+    if (isNaN(amt) || amt === 0) {
+      return showNotification("Ingresa una cantidad válida para el ajuste (positiva o negativa).", "error");
     }
-    const currentBal = categoryBalances[cat.id]?.balance || 0;
-    setShowAdjustBalanceModal(cat);
-    setAdjustedBalanceValue(currentBal.toString());
+
+    const newTx = {
+      id: uid(),
+      concept: `Ajuste manual de saldo: ${cat.name}`,
+      categoryId: catId,
+      sourceId: null,
+      type: amt > 0 ? "adjustment_income" : "adjustment_expense",
+      amount: Math.abs(amt),
+      date: todayISO()
+    };
+
+    updateDataAndSave({ ...data, transactions: [newTx, ...transactions] });
+    setCatAdjustAmount("");
+    showNotification(`Saldo de "${cat.name}" ajustado en ${amt > 0 ? "+" : ""}${money(amt)}. No afecta al Fondo General.`);
   }
 
-  function saveAdjustedBalance() {
-    if (!showAdjustBalanceModal) return;
-    const cat = showAdjustBalanceModal;
-    const newTargetBal = parseFloat(adjustedBalanceValue.replace(",", "."));
-
-    if (isNaN(newTargetBal)) {
-      return showNotification("Ingresa una cantidad válida.", "error");
-    }
-
-    const currentBal = categoryBalances[cat.id]?.balance || 0;
-    const diff = newTargetBal - currentBal;
-
-    if (diff === 0) {
-      setShowAdjustBalanceModal(null);
-      return;
-    }
-
-    const updatedCats = categories.map((c) => {
-      if (c.id === cat.id) {
-        return {
-          ...c,
-          initialBalance: (c.initialBalance || 0) + diff
-        };
-      }
-      return c;
-    });
-
-    updateDataAndSave({ ...data, categories: updatedCats });
-    showNotification(`Saldo de "${cat.name}" ajustado a ${money(newTargetBal)} sin afectar al Fondo Global.`);
-    setShowAdjustBalanceModal(null);
+  function moveCategory(dragId, targetId) {
+    if (!dragId || dragId === targetId) return;
+    const fromIdx = categories.findIndex((c) => c.id === dragId);
+    const toIdx = categories.findIndex((c) => c.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const reordered = [...categories];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    updateDataAndSave({ ...data, categories: reordered });
   }
 
   function deleteCategory(id, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     const cat = categories.find((c) => c.id === id);
     if (cat?.hasPin && prompt(`Contraseña para eliminar "${cat.name}":`) !== cat.pin) {
       return showNotification("Contraseña incorrecta.", "error");
@@ -541,7 +513,7 @@ export default function App() {
   }
 
   function clearCategoryTransactions(catId, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     const cat = categories.find((c) => c.id === catId);
     if (cat?.hasPin && prompt(`PIN para vaciar "${cat.name}":`) !== cat.pin) {
       return showNotification("Contraseña incorrecta.", "error");
@@ -564,7 +536,7 @@ export default function App() {
   }
 
   function toggleUnlockCategory(cat, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     if (unlockedCats[cat.id]) {
       setUnlockedCats((prev) => ({ ...prev, [cat.id]: false }));
     } else {
@@ -578,19 +550,19 @@ export default function App() {
     }
   }
 
-  // 💸 MOVIMIENTOS Y TRANSACCIONES
+  // Funciones de Transacciones
   function openAddTxModal() {
     setEditingTxId(null);
     setTxConcept("");
-    setTxCategory(selectedCatFilter || "");
-    setTxType("expense");
+    setTxCategory("");
+    setTxType("income");
     setTxAmount("");
     setTxDate(todayISO());
     setShowAddTx(true);
   }
 
   function openEditTxModal(t, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     const cat = categories.find((c) => c.id === t.categoryId);
     if (cat?.hasPin && !unlockedCats[cat.id]) {
       const pinEntered = prompt(`PIN requerido para modificar este movimiento de "${cat.name}":`);
@@ -609,7 +581,7 @@ export default function App() {
   }
 
   function deleteSingleTransaction(tId, e) {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     const t = transactions.find((item) => item.id === tId);
     if (!t) return;
 
@@ -691,7 +663,7 @@ export default function App() {
     setTxAmount("");
   }
 
-  // 🔄 AUTOMATIZACIONES RECURRENTES
+  // Recurrentes
   function addRecurrentRule() {
     const amt = parseFloat(recAmount.replace(",", "."));
     const day = parseInt(recDay, 10);
@@ -748,7 +720,7 @@ export default function App() {
         newTransactions.unshift({
           id: uid(),
           recurrentId: rec.id,
-          concept: `[Recurrente] ${rec.concept}`,
+          concept: `[Recorrente] ${rec.concept}`,
           categoryId: rec.categoryId,
           sourceId: null,
           type: rec.type,
@@ -767,7 +739,7 @@ export default function App() {
     showNotification(`Se aplicaron ${appliedCount} cargos/ingresos recurrentes.`);
   }
 
-  // 🔁 TRASPASOS ENTRE CATEGORÍAS
+  // Traspasos entre categorías
   function handleTransferBetweenCategories() {
     const amt = parseFloat(transferAmount.replace(",", "."));
     if (!fromCategory || !toCategory || isNaN(amt) || amt <= 0) {
@@ -863,10 +835,6 @@ export default function App() {
     });
   }, [transactions, categories, unlockedCats, selectedCatFilter, searchQuery, dateRangeFilter]);
 
-  const activeCategoryObj = useMemo(() => {
-    return categories.find((c) => c.id === selectedCatFilter);
-  }, [categories, selectedCatFilter]);
-
   if (loading) return <div className="loading-screen">Cargando datos...</div>;
 
   return (
@@ -899,25 +867,14 @@ export default function App() {
         .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
         .section-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 32px; }
-        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
-        
-        /* 🔥 ESTILOS TARJETERO / HOLDER DE SOBRES */
-        .holder-container { display: flex; flex-direction: column; gap: 0; margin-bottom: 32px; position: relative; }
-        .holder-card {
-          border-radius: 20px; padding: 22px; cursor: pointer;
-          position: relative; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-          margin-bottom: -45px; box-shadow: 0 -6px 20px rgba(0,0,0,0.4);
-          border: 1px solid rgba(255,255,255,0.15);
-        }
-        .holder-card:hover { transform: translateY(-12px) scale(1.01); z-index: 50 !important; }
-        .holder-card.active-holder { transform: translateY(-8px); z-index: 60 !important; border-color: #FFFFFF !important; box-shadow: 0 10px 30px rgba(0,0,0,0.6); margin-bottom: 15px; }
-        .holder-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        
-        .card-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; background: rgba(0, 0, 0, 0.25); backdrop-filter: blur(4px); }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; transition: transform 0.15s ease, border-color 0.15s ease; }
+        .card-interactive { cursor: pointer; }
+        .card-interactive.active { border-color: #FFFFFF !important; transform: translateY(-2px); }
+        .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .card-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; background: rgba(0, 0, 0, 0.25); }
         .btn-primary { background: var(--pink-primary); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .btn-secondary { background: #1E293B; color: var(--text-main); border: 1px solid var(--border); padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .btn-action { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.2); color: var(--text-main); padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; }
-        .btn-action:hover { background: rgba(255, 255, 255, 0.2); }
+        .btn-action { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-main); padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; transition: color 0.15s; }
         .btn-icon:hover { color: white; background: rgba(255,255,255,0.1); }
         .form-box { background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: 18px; padding: 22px; margin-bottom: 24px; }
@@ -940,25 +897,63 @@ export default function App() {
         .tx-amount { font-weight: 800; font-size: 15px; }
         .tx-amount.income { color: var(--green); }
         .tx-amount.expense { color: var(--red); }
-        
-        .icon-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 140px; overflow-y: auto; padding-right: 4px; }
-        .icon-pick button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: #0B0F17; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .icon-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .icon-pick button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: #0B0F17; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .icon-pick button.active { border-color: var(--pink-primary); color: white; background: var(--pink-primary); }
-        
+
+        .color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(26px, 1fr)); gap: 8px; margin-top: 8px; max-width: 460px; }
+        .color-swatch { width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: pointer; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15); transition: transform 0.1s ease; }
+        .color-swatch:hover { transform: scale(1.12); }
+        .color-swatch.active { border-color: white; transform: scale(1.18); box-shadow: 0 0 0 2px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.3); }
+
+        .view-toggle { display: flex; gap: 4px; background: #0B0F17; border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+        .view-toggle button { background: transparent; border: none; color: var(--text-muted); padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .view-toggle button.active { background: var(--pink-primary); color: white; }
+
+        .stack-toolbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+        .stack-edit-btn { background: #1E293B; color: var(--text-muted); border: 1px solid var(--border); padding: 9px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .stack-edit-btn.on { background: rgba(236, 72, 153, 0.15); border-color: var(--border-accent); color: var(--pink-primary); }
+
+        .stack-wrap { display: flex; flex-direction: column; padding-bottom: 8px; }
+        .stack-card { border-radius: 22px; padding: 18px 20px 34px; margin-top: -22px; cursor: pointer; transition: transform 0.15s ease, margin-top 0.2s ease; box-shadow: 0 -10px 24px rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.12); }
+        .stack-card:first-child { margin-top: 0; }
+        .stack-card:hover { transform: translateY(-3px); }
+        .stack-wrap.editing .stack-card { margin-top: 10px; cursor: default; box-shadow: none; }
+        .stack-wrap.editing .stack-card:first-child { margin-top: 0; }
+        .stack-card-top { display: flex; align-items: center; justify-content: space-between; }
+        .stack-card-left { display: flex; align-items: center; gap: 12px; }
+        .stack-card-name { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+        .stack-card-hint { font-size: 11px; font-weight: 700; opacity: 0.75; margin-top: 2px; }
+        .stack-card-actions { display: flex; align-items: center; gap: 6px; }
+        .stack-saldo-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; opacity: 0.8; margin-top: 16px; }
+        .stack-saldo-val { font-size: 20px; font-weight: 800; margin-top: 2px; }
         .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: white; z-index: 1000; animation: slideIn 0.2s ease; }
         .toast-success { background: #10B981; }
         .toast-error { background: #EF4444; }
 
-        .color-badge { padding: 3px 10px; border-radius: 8px; font-weight: 700; display: inline-block; font-size: 12px; }
-        .color-badge.income-contrast { background: rgba(16, 185, 129, 0.25); color: #34D399; }
-        .color-badge.expense-contrast { background: rgba(239, 68, 68, 0.25); color: #FCA5A5; }
-        .color-badge.light-bg-income { background: rgba(6, 95, 70, 0.2); color: #065F46; }
-        .color-badge.light-bg-expense { background: rgba(153, 27, 27, 0.2); color: #991B1B; }
+        .color-badge { padding: 2px 8px; border-radius: 6px; font-weight: 700; display: inline-block; }
+        .color-badge.income-contrast { background: rgba(16, 185, 129, 0.2); color: #34D399; }
+        .color-badge.expense-contrast { background: rgba(239, 68, 68, 0.2); color: #FCA5A5; }
+        .color-badge.light-bg-income { background: rgba(6, 95, 70, 0.15); color: #065F46; }
+        .color-badge.light-bg-expense { background: rgba(153, 27, 27, 0.15); color: #991B1B; }
 
         .recurrent-tag { font-size: 10px; background: rgba(139, 92, 246, 0.2); color: var(--purple-accent); padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px; }
+        .adjust-tag { font-size: 10px; background: rgba(245, 158, 11, 0.2); color: var(--yellow); padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px; }
 
-        .toggle-edit-mode { background: rgba(255,255,255,0.08); border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
-        .toggle-edit-mode.active { background: var(--purple-accent); color: white; border-color: transparent; }
+        .drag-handle { cursor: grab; display: flex; align-items: center; opacity: 0.6; }
+        .drag-handle:active { cursor: grabbing; }
+        .card-interactive.drag-over { outline: 2px dashed rgba(255,255,255,0.6); outline-offset: 3px; }
+
+        .filter-chip { display: inline-flex; align-items: center; gap: 8px; background: rgba(236, 72, 153, 0.15); border: 1px solid var(--border-accent); color: var(--text-main); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-bottom: 14px; }
+        .filter-chip button { background: none; border: none; color: var(--text-main); cursor: pointer; display: flex; align-items: center; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(4, 6, 10, 0.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
+        .modal-content { width: 100%; max-width: 480px; max-height: 86vh; background: var(--bg-card); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+        .modal-header { padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .modal-body { padding: 20px; overflow-y: auto; }
+        .modal-balance { font-size: 32px; font-weight: 800; margin: 4px 0 12px; }
+        .modal-tx-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+        .modal-tx-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
 
         @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
@@ -1000,13 +995,18 @@ export default function App() {
           </div>
         </div>
 
-        {/* 💳 Ingresos de Nómina (Simples e Intuitivos) */}
+        {/* Ingresos de Nómina */}
         <section>
           <div className="section-header">
-            <div className="section-title"><CreditCard size={18} color="var(--pink-primary)" /> Ingresos de Nómina</div>
+            <div>
+              <div className="section-title"><CreditCard size={18} color="var(--pink-primary)" /> Ingresos de Nómina</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                Registra aquí lo que cobráis cada uno para sumarlo al Fondo General.
+              </div>
+            </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" onClick={confirmAllSalariesDeposit}>
-                <Plus size={15} /> Ingresar Ambas Nóminas
+              <button className="btn-secondary" onClick={openBulkPayrollModal}>
+                <RefreshCw size={15} /> Registrar Cobro de Nóminas
               </button>
               <button className="btn-primary" onClick={openAddSourceModal}>
                 <Plus size={15} /> Nueva Fuente de Nómina
@@ -1028,20 +1028,9 @@ export default function App() {
                   <label>Importe de Ref. (€)</label>
                   <input type="number" value={sourceAmount} onChange={(e) => setSourceAmount(e.target.value)} placeholder="Ej. 1800" />
                 </div>
-                <div className="field">
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
                   <label>Color</label>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {PRESET_COLORS.map(c => (
-                      <div 
-                        key={c} 
-                        onClick={() => setSourceColor(c)}
-                        style={{ 
-                          width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer",
-                          border: sourceColor === c ? "2px solid white" : "none"
-                        }} 
-                      />
-                    ))}
-                  </div>
+                  <ColorPicker value={sourceColor} onChange={setSourceColor} />
                 </div>
                 <div className="field">
                   <label>Icono</label>
@@ -1082,83 +1071,98 @@ export default function App() {
             </div>
           )}
 
-          <div className="grid-3">
-            {sources.map((s) => {
-              const Icon = SRC_ICONS[s.icon] || Wallet;
-              return (
-                <div className="card" key={s.id}>
-                  <div className="card-top">
-                    <div className="card-icon" style={{ background: s.color }}><Icon size={18} /></div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="btn-icon" onClick={(e) => openEditSourceModal(s, e)}><Edit2 size={14} /></button>
-                      <button className="btn-icon" onClick={(e) => deleteSource(s.id, e)}><X size={14} /></button>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{s.name}</div>
-                  <div style={{ marginBottom: 14, fontSize: 12, color: "var(--text-muted)" }}>
-                    Importe Habitual: <strong style={{ color: "white" }}>{money(s.amount)}</strong>
-                  </div>
-                  
-                  {/* Botones Intuitivos de Ingreso Rápido o Personalizado */}
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => quickDepositSalary(s)}>
-                      <Zap size={14} /> ⚡ Ingreso Rápido
-                    </button>
-                    <button className="btn-secondary" onClick={() => openSalaryModal(s)} title="Editar cantidad antes de ingresar">
-                      <Edit2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* 🗂️ TARJETERO HOLDER DE CATEGORÍAS / SOBRES */}
-        <section>
-          <div className="section-header">
-            <div className="section-title">
-              <PieChart size={18} color="var(--purple-accent)" /> 
-              Tarjetero de Sobres
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button 
-                className={`toggle-edit-mode ${isEditMode ? "active" : ""}`}
-                onClick={() => setIsEditMode(!isEditMode)}
-              >
-                <Settings size={14} /> {isEditMode ? "Modo Edición Activado" : "Habilitar Edición"}
-              </button>
-              <button className="btn-secondary" onClick={() => setShowTransferModal(true)}><ArrowRightLeft size={15} /> Traspasos</button>
-              <button className="btn-primary" onClick={openCreateCategoryModal}><Plus size={15} /> Crear Sobre</button>
-            </div>
-          </div>
-
-          {/* Modal Ajuste Manual de Dinero */}
-          {showAdjustBalanceModal && (
+          {showBulkPayroll && (
             <div className="form-box">
-              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>
-                ✏️ Ajustar Saldo Directo: {showAdjustBalanceModal.name}
-              </h3>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px" }}>
-                Ajusta el saldo real de esta categoría sin modificar el Fondo General.
+              <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Registrar Cobro de Nóminas</h3>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 16px" }}>
+                Revisa o ajusta el importe de cada nómina antes de confirmar. Deja en blanco o en 0 la que no quieras añadir ahora.
               </p>
-              <div className="form-grid">
-                <div className="field">
-                  <label>Nuevo Saldo de la Categoría (€)</label>
-                  <input
-                    type="number"
-                    value={adjustedBalanceValue}
-                    onChange={(e) => setAdjustedBalanceValue(e.target.value)}
-                    autoFocus
-                  />
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {sources.map((s) => {
+                  const Icon = SRC_ICONS[s.icon] || Wallet;
+                  return (
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 14px" }}>
+                      <div className="card-icon" style={{ background: s.color, flexShrink: 0 }}><Icon size={16} /></div>
+                      <div style={{ flex: 1, minWidth: 120, fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                      <input
+                        type="number"
+                        value={bulkAmounts[s.id] ?? ""}
+                        onChange={(e) => setBulkAmounts((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                        placeholder="0.00"
+                        style={{ maxWidth: 140 }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                <button className="btn-primary" onClick={saveAdjustedBalance}><Check size={15} /> Guardar Nuevo Saldo</button>
-                <button className="btn-secondary" onClick={() => setShowAdjustBalanceModal(null)}>Cancelar</button>
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button className="btn-primary" onClick={confirmBulkPayroll}><Check size={15} /> Confirmar Ingresos</button>
+                <button className="btn-secondary" onClick={() => setShowBulkPayroll(false)}>Cancelar</button>
               </div>
             </div>
           )}
+
+          {sources.length === 0 ? (
+            <div className="card" style={{ textAlign: "center", padding: "30px 20px", color: "var(--text-muted)", fontSize: 13 }}>
+              Aún no has añadido ninguna fuente de nómina. Pulsa "Nueva Fuente de Nómina" para empezar.
+            </div>
+          ) : (
+            <div className="grid-3">
+              {sources.map((s) => {
+                const Icon = SRC_ICONS[s.icon] || Wallet;
+                const last = lastPayrollFor(s.id);
+                return (
+                  <div className="card" key={s.id}>
+                    <div className="card-top">
+                      <div className="card-icon" style={{ background: s.color }}><Icon size={18} /></div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn-icon" onClick={(e) => openEditSourceModal(s, e)}><Edit2 size={14} /></button>
+                        <button className="btn-icon" onClick={(e) => deleteSource(s.id, e)}><X size={14} /></button>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{s.name}</div>
+                    <div style={{ marginBottom: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                      Estimado / Ref: <strong style={{ color: "white" }}>{money(s.amount)}</strong>
+                    </div>
+                    <div style={{ marginBottom: 14, fontSize: 11, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
+                      <History size={12} />
+                      {last ? `Última: ${money(last.amount)} · ${last.date}` : "Sin nóminas registradas aún"}
+                    </div>
+                    <button className="btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={() => openSalaryModal(s)}>
+                      <Plus size={15} /> Registrar Ingreso Individual
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Categorías / Sobres */}
+        <section>
+          <div className="section-header">
+            <div className="section-title">
+              {catViewMode === "stack" ? <Layers size={18} color="var(--purple-accent)" /> : <PieChart size={18} color="var(--purple-accent)" />}
+              {catViewMode === "stack" ? "Tarjetero de Sobres" : "Categorías de Presupuesto"}
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="view-toggle">
+                <button className={catViewMode === "grid" ? "active" : ""} onClick={() => setCatViewMode("grid")}>
+                  <LayoutGrid size={14} /> Cuadrícula
+                </button>
+                <button className={catViewMode === "stack" ? "active" : ""} onClick={() => setCatViewMode("stack")}>
+                  <Layers size={14} /> Tarjetero
+                </button>
+              </div>
+              {catViewMode === "stack" && (
+                <button className={`stack-edit-btn ${stackEditMode ? "on" : ""}`} onClick={() => setStackEditMode((v) => !v)}>
+                  <Settings2 size={14} /> {stackEditMode ? "Terminar Edición" : "Habilitar Edición"}
+                </button>
+              )}
+              <button className="btn-secondary" onClick={() => setShowTransferModal(true)}><ArrowRightLeft size={15} /> Traspaso entre Sobres</button>
+              <button className="btn-primary" onClick={openAddCategoryModal}><Plus size={15} /> {catViewMode === "stack" ? "Crear Sobre" : "Nueva Categoría"}</button>
+            </div>
+          </div>
 
           {showTransferModal && (
             <div className="form-box">
@@ -1193,69 +1197,88 @@ export default function App() {
           {showAddCategory && (
             <div className="form-box">
               <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>
-                {editingCatId ? "Editar Sobre / Categoría" : "Crear Sobre con Presupuesto"}
+                {editingCategoryId ? `Editar Sobre: ${categories.find(c => c.id === editingCategoryId)?.name || ""}` : "Crear Categoría con Presupuesto"}
               </h3>
               <div className="form-grid">
                 <div className="field">
-                  <label>Nombre del Sobre</label>
-                  <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="Ej. Ahorro Coche, Fondo Emergencias" />
+                  <label>Nombre</label>
+                  <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="Puedes renombrar el sobre cuando quieras" />
                 </div>
-                <div className="field">
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
                   <label>Color de Fondo</label>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {PRESET_COLORS.map(c => (
-                      <div 
-                        key={c} 
-                        onClick={() => setNewCatColor(c)}
-                        style={{ 
-                          width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer",
-                          border: newCatColor === c ? "2px solid white" : "none"
-                        }} 
-                      />
-                    ))}
-                  </div>
+                  <ColorPicker value={newCatColor} onChange={setNewCatColor} />
                 </div>
                 <div className="field">
-                  <label>Sticker / Icono Temático</label>
+                  <label>Icono / Sticker</label>
                   <IconPicker icons={CAT_ICONS} order={CAT_ICON_ORDER} value={newCatIcon} onChange={setNewCatIcon} />
                 </div>
                 <div className="field">
-                  <label>Meta / Presupuesto Objetivo (€)</label>
+                  <label>Meta / Presupuesto (€)</label>
                   <input type="number" value={newCatGoal} onChange={(e) => setNewCatGoal(e.target.value)} placeholder="Ej. 1000" />
                 </div>
               </div>
 
               <div style={{ margin: "14px 0", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                 <input type="checkbox" id="pinCheck" checked={newCatHasPin} onChange={(e) => setNewCatHasPin(e.target.checked)} />
-                <label htmlFor="pinCheck" style={{ fontSize: 13, fontWeight: 600 }}>🔒 Proteger con PIN (Oculta del historial global)</label>
+                <label htmlFor="pinCheck" style={{ fontSize: 13, fontWeight: 600 }}>🔒 Proteger con PIN (Oculta del historial y búsquedas)</label>
               </div>
 
               {newCatHasPin && (
                 <div className="field" style={{ maxWidth: 220, marginBottom: 14 }}>
-                  <label>Contraseña PIN</label>
+                  <label>Contraseña</label>
                   <input type="password" value={newCatPin} onChange={(e) => setNewCatPin(e.target.value)} />
                 </div>
               )}
 
+              {editingCategoryId && (
+                <div className="field" style={{ maxWidth: 320, margin: "6px 0 16px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 12, padding: 12 }}>
+                  <label style={{ color: "var(--yellow)" }}>Ajustar saldo del sobre (no afecta al Fondo General)</label>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <input
+                      type="number"
+                      value={catAdjustAmount}
+                      onChange={(e) => setCatAdjustAmount(e.target.value)}
+                      placeholder="Ej. 50 o -20"
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ whiteSpace: "nowrap" }}
+                      onClick={() => applyCategoryAdjustment(editingCategoryId)}
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    Usa un número positivo para sumar o negativo (Ej. -20) para restar directamente del saldo de este sobre.
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-primary" onClick={saveCategory}><Check size={15} /> Guardar Sobre</button>
-                <button className="btn-secondary" onClick={() => setShowAddCategory(false)}>Cancelar</button>
+                <button className="btn-primary" onClick={saveCategory}><Check size={15} /> {editingCategoryId ? "Guardar Cambios" : "Guardar"}</button>
+                <button className="btn-secondary" onClick={() => { setShowAddCategory(false); setEditingCategoryId(null); }}>Cancelar</button>
               </div>
             </div>
           )}
 
-          {/* VISTA TIPO HOLDER / TARJETERO */}
-          <div className="holder-container" style={{ paddingBottom: selectedCatFilter ? 20 : 60 }}>
-            {categories.map((cat, idx) => {
+          {categories.length === 0 ? (
+            <div className="card" style={{ textAlign: "center", padding: "30px 20px", color: "var(--text-muted)", fontSize: 13 }}>
+              Aún no tienes ningún sobre. Pulsa "{catViewMode === "stack" ? "Crear Sobre" : "Nueva Categoría"}" para crear el primero.
+            </div>
+          ) : catViewMode === "grid" ? (
+          <div className="grid-3">
+            {categories.map((cat) => {
               const Icon = CAT_ICONS[cat.icon] || Wallet;
               const stats = categoryBalances[cat.id] || { balance: 0, income: 0, expense: 0 };
               const isLocked = cat.hasPin && !unlockedCats[cat.id];
               const isSelected = selectedCatFilter === cat.id;
+              const isDragOver = dragOverCatId === cat.id;
               
               const progressPct = cat.targetGoal > 0 ? Math.min(100, (stats.balance / cat.targetGoal) * 100) : 0;
               
               let progressColor = "var(--green)";
-              if (progressPct >= 100) progressColor = "#10B981";
+              if (progressPct >= 100) progressColor = "var(--red)";
               else if (progressPct >= 75) progressColor = "var(--yellow)";
 
               const catColor = cat.color || "#151C28";
@@ -1263,87 +1286,63 @@ export default function App() {
 
               return (
                 <div
-                  className={`holder-card ${isSelected ? "active-holder" : ""}`}
+                  className={`card card-interactive ${isSelected ? "active" : ""} ${isDragOver ? "drag-over" : ""}`}
                   key={cat.id}
-                  style={{
-                    backgroundColor: catColor,
-                    color: isBgLight ? "#0F172A" : "var(--text-main)",
-                    zIndex: idx + 1
-                  }}
-                  onClick={() => setSelectedCatFilter(isSelected ? null : cat.id)}
+                  style={{ backgroundColor: catColor, color: isBgLight ? "#0F172A" : "var(--text-main)" }}
+                  onClick={() => setViewingCategoryId(cat.id)}
+                  draggable
+                  onDragStart={(e) => { e.stopPropagation(); setDragCatId(cat.id); }}
+                  onDragOver={(e) => { e.preventDefault(); if (dragOverCatId !== cat.id) setDragOverCatId(cat.id); }}
+                  onDragLeave={() => setDragOverCatId((prev) => (prev === cat.id ? null : prev))}
+                  onDrop={(e) => { e.preventDefault(); e.stopPropagation(); moveCategory(dragCatId, cat.id); setDragCatId(null); setDragOverCatId(null); }}
+                  onDragEnd={() => { setDragCatId(null); setDragOverCatId(null); }}
                 >
-                  <div className="holder-top">
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div className="card-icon"><Icon size={20} /></div>
-                      <div>
-                        <div style={{ fontSize: 16, fontWeight: 800 }}>
-                          {cat.name} {cat.hasPin && <Lock size={13} style={{ marginLeft: 4 }} />}
-                        </div>
-                        <div style={{ fontSize: 11, opacity: 0.8, fontWeight: 600 }}>
-                          {isSelected ? "▲ Pulsado - Viendo Movimientos" : "▼ Pulsa para ver tarjeta y movimientos"}
-                        </div>
-                      </div>
+                  <div className="card-top">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="drag-handle" title="Arrastra para reordenar" onClick={(e) => e.stopPropagation()}>
+                        <GripVertical size={16} />
+                      </span>
+                      <div className="card-icon"><Icon size={18} /></div>
                     </div>
-
-                    <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                      {/* Acciones de Edición (Habilitables) */}
-                      {isEditMode && (
-                        <>
-                          <button className="btn-action" onClick={(e) => moveCategoryOrder(idx, -1, e)} title="Mover arriba/atrás">
-                            <ArrowLeft size={13} />
-                          </button>
-                          <button className="btn-action" onClick={(e) => moveCategoryOrder(idx, 1, e)} title="Mover abajo/adelante">
-                            <ArrowRight size={13} />
-                          </button>
-                          <button className="btn-action" onClick={(e) => openEditCategoryModal(cat, e)} title="Editar Sobre">
-                            <Edit2 size={13} />
-                          </button>
-                          <button className="btn-action" onClick={(e) => openAdjustBalanceModal(cat, e)} title="Modificar Saldo Manual">
-                            <DollarSign size={13} /> Saldo
-                          </button>
-                          <button className="btn-action" onClick={(e) => deleteCategory(cat.id, e)} title="Eliminar Sobre">
-                            <X size={13} />
-                          </button>
-                        </>
-                      )}
-
+                    <div style={{ display: "flex", gap: 6 }}>
                       {cat.hasPin && (
                         <button className="btn-action" onClick={(e) => toggleUnlockCategory(cat, e)}>
-                          {isLocked ? <Eye size={13} /> : <EyeOff size={13} />}
+                          {isLocked ? <Eye size={14} /> : <EyeOff size={14} />}
                         </button>
                       )}
-                      {!isEditMode && (
-                        <button className="btn-action" onClick={(e) => clearCategoryTransactions(cat.id, e)} title="Limpiar historial">
-                          <Trash2 size={13} />
-                        </button>
-                      )}
+                      <button className="btn-action" onClick={(e) => openEditCategoryModal(cat, e)} title="Editar sobre">
+                        <Edit2 size={14} />
+                      </button>
+                      <button className="btn-action" onClick={(e) => clearCategoryTransactions(cat.id, e)} title="Limpiar historial">
+                        <Trash2 size={14} />
+                      </button>
+                      <button className="btn-action" onClick={(e) => deleteCategory(cat.id, e)}>
+                        <X size={14} />
+                      </button>
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.8, fontWeight: 700 }}>
-                        Saldo Disponible
-                      </div>
-                      <div style={{ fontSize: 26, fontWeight: 800 }}>
-                        {isLocked ? "••••••" : money(stats.balance)}
-                      </div>
-                    </div>
+                  <div style={{ fontSize: 16, fontWeight: 800 }}>
+                    {cat.name} {cat.hasPin && <Lock size={12} />}
+                  </div>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
-                        + {isLocked ? "•••" : money(stats.income)}
-                      </span>
-                      <span className={`color-badge ${isBgLight ? "light-bg-expense" : "expense-contrast"}`}>
-                        - {isLocked ? "•••" : money(stats.expense)}
-                      </span>
-                    </div>
+                  <div style={{ marginTop: 10, fontSize: 28, fontWeight: 800 }}>
+                    {isLocked ? "••••••" : money(stats.balance)}
+                  </div>
+
+                  <div style={{ display: "flex", justifyBetween: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
+                    <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
+                      + {isLocked ? "•••" : money(stats.income)}
+                    </span>
+                    <span className={`color-badge ${isBgLight ? "light-bg-expense" : "expense-contrast"}`}>
+                      - {isLocked ? "•••" : money(stats.expense)}
+                    </span>
                   </div>
 
                   {cat.targetGoal > 0 && !isLocked && (
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, opacity: 0.85, fontWeight: 600 }}>
-                        <span>Meta Presupuesto: {money(cat.targetGoal)}</span>
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 10, opacity: 0.85, fontWeight: 600 }}>
+                        <span>Presupuesto: {money(cat.targetGoal)}</span>
                         <span>{Math.round(progressPct)}%</span>
                       </div>
                       <div className="progress-bar-bg">
@@ -1351,18 +1350,87 @@ export default function App() {
                       </div>
                     </div>
                   )}
+
+                  <div style={{ marginTop: 12, fontSize: 11, opacity: 0.7, fontWeight: 600 }}>
+                    Toca para ver movimientos ➔
+                  </div>
                 </div>
               );
             })}
           </div>
+          ) : (
+          <div className={`stack-wrap ${stackEditMode ? "editing" : ""}`}>
+            {categories.map((cat) => {
+              const Icon = CAT_ICONS[cat.icon] || Wallet;
+              const stats = categoryBalances[cat.id] || { balance: 0, income: 0, expense: 0 };
+              const isLocked = cat.hasPin && !unlockedCats[cat.id];
+              const isDragOver = dragOverCatId === cat.id;
+              const catColor = cat.color || "#151C28";
+              const isBgLight = isLightColor(catColor);
+
+              return (
+                <div
+                  className={`stack-card ${isDragOver ? "drag-over" : ""}`}
+                  key={cat.id}
+                  style={{ backgroundColor: catColor, color: isBgLight ? "#0F172A" : "var(--text-main)", zIndex: 1 }}
+                  onClick={() => { if (!stackEditMode) setViewingCategoryId(cat.id); }}
+                  draggable={stackEditMode}
+                  onDragStart={(e) => { e.stopPropagation(); setDragCatId(cat.id); }}
+                  onDragOver={(e) => { if (stackEditMode) { e.preventDefault(); if (dragOverCatId !== cat.id) setDragOverCatId(cat.id); } }}
+                  onDragLeave={() => setDragOverCatId((prev) => (prev === cat.id ? null : prev))}
+                  onDrop={(e) => { if (stackEditMode) { e.preventDefault(); e.stopPropagation(); moveCategory(dragCatId, cat.id); setDragCatId(null); setDragOverCatId(null); } }}
+                  onDragEnd={() => { setDragCatId(null); setDragOverCatId(null); }}
+                >
+                  <div className="stack-card-top">
+                    <div className="stack-card-left">
+                      {stackEditMode && (
+                        <span className="drag-handle" title="Arrastra para reordenar" onClick={(e) => e.stopPropagation()}>
+                          <GripVertical size={18} />
+                        </span>
+                      )}
+                      <div className="card-icon"><Icon size={18} /></div>
+                      <div>
+                        <div className="stack-card-name">
+                          {cat.name} {cat.hasPin && <Lock size={12} />}
+                        </div>
+                        {!stackEditMode && <div className="stack-card-hint">▼ Pulsa para ver tarjeta y movimientos</div>}
+                        {stackEditMode && cat.targetGoal > 0 && (
+                          <div className="stack-card-hint">Presupuesto: {money(cat.targetGoal)}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="stack-card-actions">
+                      {stackEditMode && cat.hasPin && (
+                        <button className="btn-action" onClick={(e) => toggleUnlockCategory(cat, e)}>
+                          {isLocked ? <Eye size={14} /> : <EyeOff size={14} />}
+                        </button>
+                      )}
+                      {stackEditMode && (
+                        <button className="btn-action" onClick={(e) => openEditCategoryModal(cat, e)} title="Editar sobre">
+                          <Edit2 size={14} />
+                        </button>
+                      )}
+                      <button className="btn-action" onClick={(e) => deleteCategory(cat.id, e)} title="Eliminar sobre">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stack-saldo-label">SALDO DISPONIBLE</div>
+                  <div className="stack-saldo-val">{isLocked ? "••••••" : money(stats.balance)}</div>
+                </div>
+              );
+            })}
+          </div>
+          )}
         </section>
 
-        {/* 🔄 AUTOMATIZACIÓN RECURRENTE MENSUAL */}
+        {/* Sección de Gastos / Ingresos Recurrentes Mensuales */}
         <section>
           <div className="section-header">
             <div className="section-title"><Calendar size={18} color="var(--yellow)" /> Automatización Recurrente Mensual</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" onClick={processMonthlyRecurrents}><RefreshCw size={15} /> Cargar Recurrentes del Mes</button>
+              <button className="btn-secondary" onClick={processMonthlyRecurrents}><RefreshCw size={15} /> Cargar Recurrentes de Este Mes</button>
               <button className="btn-primary" onClick={() => setShowRecurrentModal(true)}><Plus size={15} /> Nueva Regla Recurrente</button>
             </div>
           </div>
@@ -1428,19 +1496,11 @@ export default function App() {
           )}
         </section>
 
-        {/* 📋 HISTORIAL DE MOVIMIENTOS (CON FILTRADO POR SOBRE PULSADO) */}
+        {/* Historial de Movimientos */}
         <section>
           <div className="section-header">
-            <div className="section-title">
-              <TrendingUp size={18} color="var(--green)" /> 
-              {activeCategoryObj ? `Movimientos de: ${activeCategoryObj.name}` : "Historial General de Movimientos"}
-            </div>
+            <div className="section-title"><TrendingUp size={18} color="var(--green)" /> Historial de Movimientos</div>
             <div style={{ display: "flex", gap: 8 }}>
-              {selectedCatFilter && (
-                <button className="btn-secondary" onClick={() => setSelectedCatFilter(null)}>
-                  Ver Todo el Historial
-                </button>
-              )}
               {transactions.length > 0 && (
                 <button className="btn-action" onClick={clearAllTransactions} style={{ color: "var(--red)" }}>
                   <Trash2 size={14} /> Vaciar Movimientos
@@ -1449,6 +1509,13 @@ export default function App() {
               <button className="btn-primary" onClick={openAddTxModal}><Plus size={15} /> Nuevo Registro</button>
             </div>
           </div>
+
+          {selectedCatFilter && (
+            <div className="filter-chip">
+              Filtrando por: {categories.find((c) => c.id === selectedCatFilter)?.name || "Sobre eliminado"}
+              <button onClick={() => setSelectedCatFilter(null)} title="Quitar filtro"><X size={14} /></button>
+            </div>
+          )}
 
           <div className="search-bar">
             <div className="search-input-wrapper">
@@ -1475,12 +1542,12 @@ export default function App() {
                 <div className="field">
                   <label>Tipo</label>
                   <select value={txType} onChange={(e) => setTxType(e.target.value)}>
-                    <option value="expense">Gasto de Categoría (-)</option>
                     <option value="income">Asignar Fondo General ➔ Categoría (+)</option>
+                    <option value="expense">Gasto de Categoría (-)</option>
                   </select>
                 </div>
                 <div className="field">
-                  <label>Categoría / Sobre</label>
+                  <label>Categoría</label>
                   <select value={txCategory} onChange={(e) => setTxCategory(e.target.value)}>
                     <option value="">Selecciona...</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name} {c.hasPin ? "🔒" : ""}</option>)}
@@ -1510,14 +1577,15 @@ export default function App() {
           <div className="tx-list">
             {filteredTx.length === 0 ? (
               <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-muted)", fontSize: 13 }}>
-                No se encontraron registros en este filtro.
+                No se encontraron registros.
               </div>
             ) : (
               filteredTx.map((t) => {
                 const cat = categories.find((c) => c.id === t.categoryId);
                 const Icon = cat ? (CAT_ICONS[cat.icon] || Wallet) : Wallet;
                 const catBgColor = cat?.color || "#1E293B";
-                const isExpense = t.type === "expense" || t.type === "transfer_expense";
+                const isExpense = t.type === "expense" || t.type === "transfer_expense" || t.type === "adjustment_expense";
+                const isAdjustment = t.type === "adjustment_income" || t.type === "adjustment_expense";
 
                 return (
                   <div className="tx-item" key={t.id}>
@@ -1528,7 +1596,8 @@ export default function App() {
                       <div>
                         <div className="tx-title">
                           {t.concept}
-                          {t.recurrentId && <span className="recurrent-tag">Recurrente</span>}
+                          {t.recurrentId && <span className="recurrent-tag">Recorrente</span>}
+                          {isAdjustment && <span className="adjust-tag">Ajuste</span>}
                         </div>
                         <div className="tx-sub">{cat ? cat.name : "Fondo General"} • {t.date}</div>
                       </div>
@@ -1551,6 +1620,130 @@ export default function App() {
           </div>
         </section>
       </main>
+
+      {viewingCategoryId && (() => {
+        const cat = categories.find((c) => c.id === viewingCategoryId);
+        if (!cat) return null;
+        const Icon = CAT_ICONS[cat.icon] || Wallet;
+        const stats = categoryBalances[cat.id] || { balance: 0, income: 0, expense: 0 };
+        const isLocked = cat.hasPin && !unlockedCats[cat.id];
+        const catColor = cat.color || "#151C28";
+        const isBgLight = isLightColor(catColor);
+        const catTxs = transactions
+          .filter((t) => t.categoryId === cat.id)
+          .filter((t) => searchQuery === "" || t.concept.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        return (
+          <div className="modal-overlay" onClick={() => setViewingCategoryId(null)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header" style={{ backgroundColor: catColor, color: isBgLight ? "#0F172A" : "white" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div className="card-icon"><Icon size={20} /></div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
+                      {cat.name} {cat.hasPin && <Lock size={13} />}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      {isLocked ? "Categoría bloqueada" : `${catTxs.length} movimiento${catTxs.length === 1 ? "" : "s"}`}
+                    </div>
+                  </div>
+                </div>
+                <button className="btn-icon" style={{ color: isBgLight ? "#0F172A" : "white" }} onClick={() => setViewingCategoryId(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="modal-balance">{isLocked ? "••••••" : money(stats.balance)}</div>
+
+                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                  <span className="color-badge income-contrast">+ {isLocked ? "•••" : money(stats.income)}</span>
+                  <span className="color-badge expense-contrast">- {isLocked ? "•••" : money(stats.expense)}</span>
+                </div>
+
+                {cat.targetGoal > 0 && !isLocked && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--text-muted)", fontWeight: 600 }}>
+                      <span>Presupuesto: {money(cat.targetGoal)}</span>
+                      <span>{Math.round(Math.min(100, (stats.balance / cat.targetGoal) * 100))}%</span>
+                    </div>
+                    <div className="progress-bar-bg">
+                      <div
+                        className="progress-bar-fill"
+                        style={{
+                          width: `${Math.min(100, (stats.balance / cat.targetGoal) * 100)}%`,
+                          backgroundColor: "var(--pink-primary)"
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+                  <button className="btn-secondary" onClick={(e) => { openEditCategoryModal(cat, e); setViewingCategoryId(null); }}>
+                    <Edit2 size={14} /> Editar sobre
+                  </button>
+                  {cat.hasPin && (
+                    <button className="btn-secondary" onClick={(e) => toggleUnlockCategory(cat, e)}>
+                      {isLocked ? <Eye size={14} /> : <EyeOff size={14} />} {isLocked ? "Desbloquear" : "Bloquear"}
+                    </button>
+                  )}
+                  <button
+                    className="btn-secondary"
+                    onClick={() => { setSelectedCatFilter(cat.id); setViewingCategoryId(null); }}
+                  >
+                    <Search size={14} /> Ver en historial completo
+                  </button>
+                </div>
+
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: "var(--text-muted)" }}>
+                  Movimientos de este sobre
+                </div>
+
+                <div className="modal-tx-list">
+                  {isLocked ? (
+                    <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                      Desbloquea la categoría para ver sus movimientos.
+                    </div>
+                  ) : catTxs.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                      Todavía no hay movimientos en este sobre.
+                    </div>
+                  ) : (
+                    catTxs.map((t) => {
+                      const isExpense = t.type === "expense" || t.type === "transfer_expense" || t.type === "adjustment_expense";
+                      const isAdjustment = t.type === "adjustment_income" || t.type === "adjustment_expense";
+                      return (
+                        <div className="modal-tx-item" key={t.id}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>
+                              {t.concept}
+                              {t.recurrentId && <span className="recurrent-tag">Recorrente</span>}
+                              {isAdjustment && <span className="adjust-tag">Ajuste</span>}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{t.date}</div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div className={`tx-amount ${isExpense ? "expense" : "income"}`}>
+                              {isExpense ? "-" : "+"}{money(t.amount)}
+                            </div>
+                            <button className="btn-icon" onClick={(e) => { openEditTxModal(t, e); setViewingCategoryId(null); }} title="Editar movimiento">
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="btn-icon" onClick={(e) => deleteSingleTransaction(t.id, e)} title="Eliminar movimiento">
+                              <Trash2 size={14} style={{ color: "var(--red)" }} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
