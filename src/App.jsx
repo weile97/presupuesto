@@ -8,7 +8,7 @@ import {
   Dumbbell, Baby, Shirt, Smartphone, LayoutGrid, Layers, Settings2,
   History, BellRing
 } from "lucide-react";
-import "./App_9.css"; // Importación de la nueva hoja de estilos externa
+import "./App_9.css"; // Importación de la nueva hoja de estilos externa ha
 
 const API_URL = "/api/data";
 
