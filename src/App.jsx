@@ -3,21 +3,55 @@ import {
   PawPrint, UtensilsCrossed, AlertTriangle, Home, Car, ShoppingBag,
   Plane, Gift, Heart, Wallet, Plus, Check, Banknote, PiggyBank,
   Coins, Lock, Eye, EyeOff, ArrowRightLeft, TrendingUp, CreditCard,
-  PieChart, Download, Search, Trash2, X, Edit2, RefreshCw, Calendar
+  PieChart, Download, Search, Trash2, X, Edit2, RefreshCw, Calendar,
+  Building2, Landmark, Receipt, Target, Sparkles, ShieldCheck,
+  Vault, ArrowLeft, ArrowRight, Zap, Settings, DollarSign, KeyRound
 } from "lucide-react";
 
 const API_URL = "/api/data";
 
+// 🌟 Catálogo Extendido de Stickers (Ahorro, Bancos y Categorías)
 const CAT_ICONS = {
-  paw: PawPrint, food: UtensilsCrossed, alert: AlertTriangle, home: Home,
-  car: Car, bag: ShoppingBag, plane: Plane, gift: Gift, heart: Heart, wallet: Wallet, coins: Coins
+  // Ahorro e Inversiones
+  piggy: PiggyBank,
+  vault: Vault,
+  trending: TrendingUp,
+  target: Target,
+  sparkles: Sparkles,
+  shield: ShieldCheck,
+  coins: Coins,
+  wallet: Wallet,
+  banknote: Banknote,
+  dollar: DollarSign,
+  
+  // Bancos y Gestión
+  bank: Building2,
+  landmark: Landmark,
+  card: CreditCard,
+  receipt: Receipt,
+  key: KeyRound,
+  
+  // Vida y Gastos Diario
+  home: Home,
+  food: UtensilsCrossed,
+  car: Car,
+  bag: ShoppingBag,
+  plane: Plane,
+  gift: Gift,
+  heart: Heart,
+  paw: PawPrint,
+  alert: AlertTriangle
 };
-const CAT_ICON_ORDER = ["paw", "food", "alert", "home", "car", "bag", "plane", "gift", "heart", "wallet", "coins"];
-const SRC_ICONS = { banknote: Banknote, piggy: PiggyBank, wallet: Wallet, gift: Gift, coins: Coins };
 
+const CAT_ICON_ORDER = Object.keys(CAT_ICONS);
+const SRC_ICONS = { banknote: Banknote, piggy: PiggyBank, wallet: Wallet, gift: Gift, coins: Coins, bank: Building2, card: CreditCard };
+
+// 🎨 Paleta Extendida de Colores Vivaces
 const PRESET_COLORS = [
   "#EC4899", "#8B5CF6", "#3B82F6", "#10B981",
-  "#F59E0B", "#6366F1", "#064E3B", "#7C2D12"
+  "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
+  "#6366F1", "#D946EF", "#F97316", "#14B8A6",
+  "#2DD4BF", "#A855F7", "#4ADE80", "#F43F5E"
 ];
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -35,7 +69,7 @@ const isLightColor = (hex) => {
   const g = (rgb >> 8) & 0xff;
   const b = (rgb >> 0) & 0xff;
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luma > 128;
+  return luma > 140;
 };
 
 const money = (n) =>
@@ -48,6 +82,7 @@ function IconPicker({ icons, order, value, onChange }) {
     <div className="icon-pick">
       {order.map((key) => {
         const Ico = icons[key];
+        if (!Ico) return null;
         return (
           <button
             key={key}
@@ -81,15 +116,17 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Estados Visuales y Controles
   const [unlockedCats, setUnlockedCats] = useState({});
   const [selectedCatFilter, setSelectedCatFilter] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const [toast, setToast] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false); // Modo Edición Habilitable
 
+  // Modales y Formulario Nóminas
   const [depositSourceModal, setDepositSourceModal] = useState(null);
   const [customSalaryAmount, setCustomSalaryAmount] = useState("");
-
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [editingSourceId, setEditingSourceId] = useState(null);
   const [sourceName, setSourceName] = useState("");
@@ -97,7 +134,9 @@ export default function App() {
   const [sourceIcon, setSourceIcon] = useState("banknote");
   const [sourceColor, setSourceColor] = useState(PRESET_COLORS[0]);
 
+  // Modales y Formulario Categorías (Creación / Edición)
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [editingCatId, setEditingCatId] = useState(null);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("wallet");
   const [newCatColor, setNewCatColor] = useState(PRESET_COLORS[0]);
@@ -105,6 +144,11 @@ export default function App() {
   const [newCatPin, setNewCatPin] = useState("");
   const [newCatGoal, setNewCatGoal] = useState("");
 
+  // Modal Ajuste de Saldo Manual
+  const [showAdjustBalanceModal, setShowAdjustBalanceModal] = useState(null);
+  const [adjustedBalanceValue, setAdjustedBalanceValue] = useState("");
+
+  // Formulario Transacciones
   const [showAddTx, setShowAddTx] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
   const [txConcept, setTxConcept] = useState("");
@@ -113,11 +157,13 @@ export default function App() {
   const [txAmount, setTxAmount] = useState("");
   const [txDate, setTxDate] = useState(todayISO());
 
+  // Traspasos entre Sobres
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [fromCategory, setFromCategory] = useState("");
   const [toCategory, setToCategory] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
 
+  // Automatizaciones Recurrentes
   const [showRecurrentModal, setShowRecurrentModal] = useState(false);
   const [recConcept, setRecConcept] = useState("");
   const [recCategory, setRecCategory] = useState("");
@@ -148,7 +194,7 @@ export default function App() {
 
     const timer = setTimeout(() => {
       setUnlockedCats({});
-      showNotification("Protección activada: Categorías bloqueadas.", "error");
+      showNotification("Protección activada: Categorías con PIN bloqueadas.", "error");
     }, 60000);
 
     return () => clearTimeout(timer);
@@ -169,7 +215,7 @@ export default function App() {
   const recurrents = data?.recurrents || [];
   const lastActiveMonth = data?.lastActiveMonth || currentMonthYear();
 
-  // Balances
+  // Cálculos de balances
   const totalBaseIncome = useMemo(() => {
     return transactions
       .filter((t) => t.type === "payroll_income")
@@ -204,7 +250,27 @@ export default function App() {
     return map;
   }, [categories, transactions]);
 
-  // Funciones de Nómina / Fuentes de Ingreso
+  // 💳 SISTEMA DE NÓMINAS SIMPLIFICADO E INTUITIVO
+  function quickDepositSalary(src) {
+    if (!src.amount || src.amount <= 0) {
+      return openSalaryModal(src);
+    }
+    const newTx = {
+      id: uid(),
+      concept: `Nómina: ${src.name}`,
+      categoryId: null,
+      sourceId: src.id,
+      type: "payroll_income",
+      amount: parseFloat(src.amount),
+      date: todayISO()
+    };
+    updateDataAndSave({
+      ...data,
+      transactions: [newTx, ...transactions]
+    });
+    showNotification(`⚡ Ingresados ${money(src.amount)} de ${src.name} al Fondo General.`);
+  }
+
   function openSalaryModal(src) {
     setDepositSourceModal(src);
     setCustomSalaryAmount(src.amount ? src.amount.toString() : "");
@@ -273,7 +339,7 @@ export default function App() {
   }
 
   function openEditSourceModal(src, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     setEditingSourceId(src.id);
     setSourceName(src.name);
     setSourceAmount(src.amount ? src.amount.toString() : "");
@@ -314,7 +380,7 @@ export default function App() {
   }
 
   function deleteSource(srcId, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     if (window.confirm("¿Eliminar esta fuente de nómina?")) {
       updateDataAndSave({
         ...data,
@@ -324,33 +390,142 @@ export default function App() {
     }
   }
 
-  // Funciones de Categorías
-  function addCategory() {
+  // 📁 GESTIÓN Y REORDENACIÓN DE CATEGORÍAS
+  function moveCategoryOrder(index, direction, e) {
+    if (e) e.stopPropagation();
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= categories.length) return;
+
+    const updatedCategories = [...categories];
+    const [movedCat] = updatedCategories.splice(index, 1);
+    updatedCategories.splice(newIndex, 0, movedCat);
+
+    updateDataAndSave({ ...data, categories: updatedCategories });
+  }
+
+  function openCreateCategoryModal() {
+    setEditingCatId(null);
+    setNewCatName("");
+    setNewCatIcon("wallet");
+    setNewCatColor(PRESET_COLORS[0]);
+    setNewCatHasPin(false);
+    setNewCatPin("");
+    setNewCatGoal("");
+    setShowAddCategory(true);
+  }
+
+  function openEditCategoryModal(cat, e) {
+    if (e) e.stopPropagation();
+    if (cat.hasPin && !unlockedCats[cat.id]) {
+      const pinEntered = prompt(`PIN para editar "${cat.name}":`);
+      if (!pinEntered || (hashPin(pinEntered) !== cat.pinHash && pinEntered !== cat.pin)) {
+        return showNotification("PIN incorrecto.", "error");
+      }
+    }
+
+    setEditingCatId(cat.id);
+    setNewCatName(cat.name);
+    setNewCatIcon(cat.icon || "wallet");
+    setNewCatColor(cat.color || PRESET_COLORS[0]);
+    setNewCatHasPin(!!cat.hasPin);
+    setNewCatPin(cat.pin || "");
+    setNewCatGoal(cat.targetGoal ? cat.targetGoal.toString() : "");
+    setShowAddCategory(true);
+  }
+
+  function saveCategory() {
     const name = newCatName.trim();
     if (!name) return showNotification("Ingresa un nombre para la categoría.", "error");
     if (newCatHasPin && !newCatPin.trim()) return showNotification("Asigna un PIN a la categoría.", "error");
 
     const goalParsed = parseFloat(newCatGoal.replace(",", "."));
 
-    const newCat = {
-      id: uid(),
-      name,
-      icon: newCatIcon,
-      color: newCatColor,
-      hasPin: newCatHasPin,
-      pinHash: newCatHasPin ? hashPin(newCatPin) : "",
-      pin: newCatHasPin ? newCatPin.trim() : "",
-      targetGoal: isNaN(goalParsed) ? 0 : goalParsed,
-      initialBalance: 0
-    };
+    if (editingCatId) {
+      const updatedCats = categories.map((c) => {
+        if (c.id === editingCatId) {
+          return {
+            ...c,
+            name,
+            icon: newCatIcon,
+            color: newCatColor,
+            hasPin: newCatHasPin,
+            pinHash: newCatHasPin ? hashPin(newCatPin) : "",
+            pin: newCatHasPin ? newCatPin.trim() : "",
+            targetGoal: isNaN(goalParsed) ? 0 : goalParsed
+          };
+        }
+        return c;
+      });
+      updateDataAndSave({ ...data, categories: updatedCats });
+      showNotification("Categoría modificada con éxito.");
+    } else {
+      const newCat = {
+        id: uid(),
+        name,
+        icon: newCatIcon,
+        color: newCatColor,
+        hasPin: newCatHasPin,
+        pinHash: newCatHasPin ? hashPin(newCatPin) : "",
+        pin: newCatHasPin ? newCatPin.trim() : "",
+        targetGoal: isNaN(goalParsed) ? 0 : goalParsed,
+        initialBalance: 0
+      };
+      updateDataAndSave({ ...data, categories: [...categories, newCat] });
+      showNotification("Categoría creada con éxito.");
+    }
 
-    updateDataAndSave({ ...data, categories: [...categories, newCat] });
-    setNewCatName(""); setNewCatIcon("wallet"); setNewCatColor(PRESET_COLORS[0]); setNewCatHasPin(false); setNewCatPin(""); setNewCatGoal(""); setShowAddCategory(false);
-    showNotification("Categoría creada con éxito.");
+    setShowAddCategory(false);
+    setEditingCatId(null);
+  }
+
+  // ✏️ AJUSTAR DINERO MANUAL DE CADA CATEGORÍA SIN AFECTAR AL GLOBAL
+  function openAdjustBalanceModal(cat, e) {
+    if (e) e.stopPropagation();
+    if (cat.hasPin && !unlockedCats[cat.id]) {
+      const pinEntered = prompt(`PIN para ajustar saldo de "${cat.name}":`);
+      if (!pinEntered || (hashPin(pinEntered) !== cat.pinHash && pinEntered !== cat.pin)) {
+        return showNotification("PIN incorrecto.", "error");
+      }
+    }
+    const currentBal = categoryBalances[cat.id]?.balance || 0;
+    setShowAdjustBalanceModal(cat);
+    setAdjustedBalanceValue(currentBal.toString());
+  }
+
+  function saveAdjustedBalance() {
+    if (!showAdjustBalanceModal) return;
+    const cat = showAdjustBalanceModal;
+    const newTargetBal = parseFloat(adjustedBalanceValue.replace(",", "."));
+
+    if (isNaN(newTargetBal)) {
+      return showNotification("Ingresa una cantidad válida.", "error");
+    }
+
+    const currentBal = categoryBalances[cat.id]?.balance || 0;
+    const diff = newTargetBal - currentBal;
+
+    if (diff === 0) {
+      setShowAdjustBalanceModal(null);
+      return;
+    }
+
+    const updatedCats = categories.map((c) => {
+      if (c.id === cat.id) {
+        return {
+          ...c,
+          initialBalance: (c.initialBalance || 0) + diff
+        };
+      }
+      return c;
+    });
+
+    updateDataAndSave({ ...data, categories: updatedCats });
+    showNotification(`Saldo de "${cat.name}" ajustado a ${money(newTargetBal)} sin afectar al Fondo Global.`);
+    setShowAdjustBalanceModal(null);
   }
 
   function deleteCategory(id, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     const cat = categories.find((c) => c.id === id);
     if (cat?.hasPin && prompt(`Contraseña para eliminar "${cat.name}":`) !== cat.pin) {
       return showNotification("Contraseña incorrecta.", "error");
@@ -366,7 +541,7 @@ export default function App() {
   }
 
   function clearCategoryTransactions(catId, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     const cat = categories.find((c) => c.id === catId);
     if (cat?.hasPin && prompt(`PIN para vaciar "${cat.name}":`) !== cat.pin) {
       return showNotification("Contraseña incorrecta.", "error");
@@ -389,7 +564,7 @@ export default function App() {
   }
 
   function toggleUnlockCategory(cat, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     if (unlockedCats[cat.id]) {
       setUnlockedCats((prev) => ({ ...prev, [cat.id]: false }));
     } else {
@@ -403,19 +578,19 @@ export default function App() {
     }
   }
 
-  // Funciones de Transacciones
+  // 💸 MOVIMIENTOS Y TRANSACCIONES
   function openAddTxModal() {
     setEditingTxId(null);
     setTxConcept("");
-    setTxCategory("");
-    setTxType("income");
+    setTxCategory(selectedCatFilter || "");
+    setTxType("expense");
     setTxAmount("");
     setTxDate(todayISO());
     setShowAddTx(true);
   }
 
   function openEditTxModal(t, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     const cat = categories.find((c) => c.id === t.categoryId);
     if (cat?.hasPin && !unlockedCats[cat.id]) {
       const pinEntered = prompt(`PIN requerido para modificar este movimiento de "${cat.name}":`);
@@ -434,7 +609,7 @@ export default function App() {
   }
 
   function deleteSingleTransaction(tId, e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     const t = transactions.find((item) => item.id === tId);
     if (!t) return;
 
@@ -516,7 +691,7 @@ export default function App() {
     setTxAmount("");
   }
 
-  // Recurrentes
+  // 🔄 AUTOMATIZACIONES RECURRENTES
   function addRecurrentRule() {
     const amt = parseFloat(recAmount.replace(",", "."));
     const day = parseInt(recDay, 10);
@@ -573,7 +748,7 @@ export default function App() {
         newTransactions.unshift({
           id: uid(),
           recurrentId: rec.id,
-          concept: `[Recorrente] ${rec.concept}`,
+          concept: `[Recurrente] ${rec.concept}`,
           categoryId: rec.categoryId,
           sourceId: null,
           type: rec.type,
@@ -592,7 +767,7 @@ export default function App() {
     showNotification(`Se aplicaron ${appliedCount} cargos/ingresos recurrentes.`);
   }
 
-  // Traspasos entre categorías
+  // 🔁 TRASPASOS ENTRE CATEGORÍAS
   function handleTransferBetweenCategories() {
     const amt = parseFloat(transferAmount.replace(",", "."));
     if (!fromCategory || !toCategory || isNaN(amt) || amt <= 0) {
@@ -688,6 +863,10 @@ export default function App() {
     });
   }, [transactions, categories, unlockedCats, selectedCatFilter, searchQuery, dateRangeFilter]);
 
+  const activeCategoryObj = useMemo(() => {
+    return categories.find((c) => c.id === selectedCatFilter);
+  }, [categories, selectedCatFilter]);
+
   if (loading) return <div className="loading-screen">Cargando datos...</div>;
 
   return (
@@ -720,14 +899,25 @@ export default function App() {
         .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
         .section-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 32px; }
-        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; transition: transform 0.15s ease, border-color 0.15s ease; }
-        .card-interactive { cursor: pointer; }
-        .card-interactive.active { border-color: #FFFFFF !important; transform: translateY(-2px); }
-        .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-        .card-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; background: rgba(0, 0, 0, 0.25); }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+        
+        /* 🔥 ESTILOS TARJETERO / HOLDER DE SOBRES */
+        .holder-container { display: flex; flex-direction: column; gap: 0; margin-bottom: 32px; position: relative; }
+        .holder-card {
+          border-radius: 20px; padding: 22px; cursor: pointer;
+          position: relative; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          margin-bottom: -45px; box-shadow: 0 -6px 20px rgba(0,0,0,0.4);
+          border: 1px solid rgba(255,255,255,0.15);
+        }
+        .holder-card:hover { transform: translateY(-12px) scale(1.01); z-index: 50 !important; }
+        .holder-card.active-holder { transform: translateY(-8px); z-index: 60 !important; border-color: #FFFFFF !important; box-shadow: 0 10px 30px rgba(0,0,0,0.6); margin-bottom: 15px; }
+        .holder-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        
+        .card-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; background: rgba(0, 0, 0, 0.25); backdrop-filter: blur(4px); }
         .btn-primary { background: var(--pink-primary); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .btn-secondary { background: #1E293B; color: var(--text-main); border: 1px solid var(--border); padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .btn-action { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-main); padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .btn-action { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.2); color: var(--text-main); padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .btn-action:hover { background: rgba(255, 255, 255, 0.2); }
         .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; transition: color 0.15s; }
         .btn-icon:hover { color: white; background: rgba(255,255,255,0.1); }
         .form-box { background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: 18px; padding: 22px; margin-bottom: 24px; }
@@ -750,20 +940,25 @@ export default function App() {
         .tx-amount { font-weight: 800; font-size: 15px; }
         .tx-amount.income { color: var(--green); }
         .tx-amount.expense { color: var(--red); }
-        .icon-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-        .icon-pick button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: #0B0F17; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        .icon-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 140px; overflow-y: auto; padding-right: 4px; }
+        .icon-pick button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: #0B0F17; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .icon-pick button.active { border-color: var(--pink-primary); color: white; background: var(--pink-primary); }
+        
         .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: white; z-index: 1000; animation: slideIn 0.2s ease; }
         .toast-success { background: #10B981; }
         .toast-error { background: #EF4444; }
 
-        .color-badge { padding: 2px 8px; border-radius: 6px; font-weight: 700; display: inline-block; }
-        .color-badge.income-contrast { background: rgba(16, 185, 129, 0.2); color: #34D399; }
-        .color-badge.expense-contrast { background: rgba(239, 68, 68, 0.2); color: #FCA5A5; }
-        .color-badge.light-bg-income { background: rgba(6, 95, 70, 0.15); color: #065F46; }
-        .color-badge.light-bg-expense { background: rgba(153, 27, 27, 0.15); color: #991B1B; }
+        .color-badge { padding: 3px 10px; border-radius: 8px; font-weight: 700; display: inline-block; font-size: 12px; }
+        .color-badge.income-contrast { background: rgba(16, 185, 129, 0.25); color: #34D399; }
+        .color-badge.expense-contrast { background: rgba(239, 68, 68, 0.25); color: #FCA5A5; }
+        .color-badge.light-bg-income { background: rgba(6, 95, 70, 0.2); color: #065F46; }
+        .color-badge.light-bg-expense { background: rgba(153, 27, 27, 0.2); color: #991B1B; }
 
         .recurrent-tag { font-size: 10px; background: rgba(139, 92, 246, 0.2); color: var(--purple-accent); padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px; }
+
+        .toggle-edit-mode { background: rgba(255,255,255,0.08); border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+        .toggle-edit-mode.active { background: var(--purple-accent); color: white; border-color: transparent; }
 
         @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
@@ -805,7 +1000,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Ingresos de Nómina */}
+        {/* 💳 Ingresos de Nómina (Simples e Intuitivos) */}
         <section>
           <div className="section-header">
             <div className="section-title"><CreditCard size={18} color="var(--pink-primary)" /> Ingresos de Nómina</div>
@@ -835,13 +1030,13 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>Color</label>
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     {PRESET_COLORS.map(c => (
                       <div 
                         key={c} 
                         onClick={() => setSourceColor(c)}
                         style={{ 
-                          width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                          width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer",
                           border: sourceColor === c ? "2px solid white" : "none"
                         }} 
                       />
@@ -901,26 +1096,69 @@ export default function App() {
                   </div>
                   <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{s.name}</div>
                   <div style={{ marginBottom: 14, fontSize: 12, color: "var(--text-muted)" }}>
-                    Estimado / Ref: <strong style={{ color: "white" }}>{money(s.amount)}</strong>
+                    Importe Habitual: <strong style={{ color: "white" }}>{money(s.amount)}</strong>
                   </div>
-                  <button className="btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={() => openSalaryModal(s)}>
-                    <Plus size={15} /> Registrar Ingreso
-                  </button>
+                  
+                  {/* Botones Intuitivos de Ingreso Rápido o Personalizado */}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => quickDepositSalary(s)}>
+                      <Zap size={14} /> ⚡ Ingreso Rápido
+                    </button>
+                    <button className="btn-secondary" onClick={() => openSalaryModal(s)} title="Editar cantidad antes de ingresar">
+                      <Edit2 size={14} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
         </section>
 
-        {/* Categorías / Sobres */}
+        {/* 🗂️ TARJETERO HOLDER DE CATEGORÍAS / SOBRES */}
         <section>
           <div className="section-header">
-            <div className="section-title"><PieChart size={18} color="var(--purple-accent)" /> Categorías de Presupuesto</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" onClick={() => setShowTransferModal(true)}><ArrowRightLeft size={15} /> Traspaso entre Sobres</button>
-              <button className="btn-primary" onClick={() => setShowAddCategory(true)}><Plus size={15} /> Nueva Categoría</button>
+            <div className="section-title">
+              <PieChart size={18} color="var(--purple-accent)" /> 
+              Tarjetero de Sobres
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button 
+                className={`toggle-edit-mode ${isEditMode ? "active" : ""}`}
+                onClick={() => setIsEditMode(!isEditMode)}
+              >
+                <Settings size={14} /> {isEditMode ? "Modo Edición Activado" : "Habilitar Edición"}
+              </button>
+              <button className="btn-secondary" onClick={() => setShowTransferModal(true)}><ArrowRightLeft size={15} /> Traspasos</button>
+              <button className="btn-primary" onClick={openCreateCategoryModal}><Plus size={15} /> Crear Sobre</button>
             </div>
           </div>
+
+          {/* Modal Ajuste Manual de Dinero */}
+          {showAdjustBalanceModal && (
+            <div className="form-box">
+              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>
+                ✏️ Ajustar Saldo Directo: {showAdjustBalanceModal.name}
+              </h3>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px" }}>
+                Ajusta el saldo real de esta categoría sin modificar el Fondo General.
+              </p>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Nuevo Saldo de la Categoría (€)</label>
+                  <input
+                    type="number"
+                    value={adjustedBalanceValue}
+                    onChange={(e) => setAdjustedBalanceValue(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button className="btn-primary" onClick={saveAdjustedBalance}><Check size={15} /> Guardar Nuevo Saldo</button>
+                <button className="btn-secondary" onClick={() => setShowAdjustBalanceModal(null)}>Cancelar</button>
+              </div>
+            </div>
+          )}
 
           {showTransferModal && (
             <div className="form-box">
@@ -954,21 +1192,23 @@ export default function App() {
 
           {showAddCategory && (
             <div className="form-box">
-              <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>Crear Categoría con Presupuesto</h3>
+              <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>
+                {editingCatId ? "Editar Sobre / Categoría" : "Crear Sobre con Presupuesto"}
+              </h3>
               <div className="form-grid">
                 <div className="field">
-                  <label>Nombre</label>
-                  <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} />
+                  <label>Nombre del Sobre</label>
+                  <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="Ej. Ahorro Coche, Fondo Emergencias" />
                 </div>
                 <div className="field">
                   <label>Color de Fondo</label>
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     {PRESET_COLORS.map(c => (
                       <div 
                         key={c} 
                         onClick={() => setNewCatColor(c)}
                         style={{ 
-                          width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                          width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer",
                           border: newCatColor === c ? "2px solid white" : "none"
                         }} 
                       />
@@ -976,36 +1216,37 @@ export default function App() {
                   </div>
                 </div>
                 <div className="field">
-                  <label>Icono</label>
+                  <label>Sticker / Icono Temático</label>
                   <IconPicker icons={CAT_ICONS} order={CAT_ICON_ORDER} value={newCatIcon} onChange={setNewCatIcon} />
                 </div>
                 <div className="field">
-                  <label>Meta / Presupuesto (€)</label>
+                  <label>Meta / Presupuesto Objetivo (€)</label>
                   <input type="number" value={newCatGoal} onChange={(e) => setNewCatGoal(e.target.value)} placeholder="Ej. 1000" />
                 </div>
               </div>
 
               <div style={{ margin: "14px 0", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                 <input type="checkbox" id="pinCheck" checked={newCatHasPin} onChange={(e) => setNewCatHasPin(e.target.checked)} />
-                <label htmlFor="pinCheck" style={{ fontSize: 13, fontWeight: 600 }}>🔒 Proteger con PIN (Oculta del historial y búsquedas)</label>
+                <label htmlFor="pinCheck" style={{ fontSize: 13, fontWeight: 600 }}>🔒 Proteger con PIN (Oculta del historial global)</label>
               </div>
 
               {newCatHasPin && (
                 <div className="field" style={{ maxWidth: 220, marginBottom: 14 }}>
-                  <label>Contraseña</label>
+                  <label>Contraseña PIN</label>
                   <input type="password" value={newCatPin} onChange={(e) => setNewCatPin(e.target.value)} />
                 </div>
               )}
 
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-primary" onClick={addCategory}><Check size={15} /> Guardar</button>
+                <button className="btn-primary" onClick={saveCategory}><Check size={15} /> Guardar Sobre</button>
                 <button className="btn-secondary" onClick={() => setShowAddCategory(false)}>Cancelar</button>
               </div>
             </div>
           )}
 
-          <div className="grid-3">
-            {categories.map((cat) => {
+          {/* VISTA TIPO HOLDER / TARJETERO */}
+          <div className="holder-container" style={{ paddingBottom: selectedCatFilter ? 20 : 60 }}>
+            {categories.map((cat, idx) => {
               const Icon = CAT_ICONS[cat.icon] || Wallet;
               const stats = categoryBalances[cat.id] || { balance: 0, income: 0, expense: 0 };
               const isLocked = cat.hasPin && !unlockedCats[cat.id];
@@ -1014,7 +1255,7 @@ export default function App() {
               const progressPct = cat.targetGoal > 0 ? Math.min(100, (stats.balance / cat.targetGoal) * 100) : 0;
               
               let progressColor = "var(--green)";
-              if (progressPct >= 100) progressColor = "var(--red)";
+              if (progressPct >= 100) progressColor = "#10B981";
               else if (progressPct >= 75) progressColor = "var(--yellow)";
 
               const catColor = cat.color || "#151C28";
@@ -1022,49 +1263,87 @@ export default function App() {
 
               return (
                 <div
-                  className={`card card-interactive ${isSelected ? "active" : ""}`}
+                  className={`holder-card ${isSelected ? "active-holder" : ""}`}
                   key={cat.id}
-                  style={{ backgroundColor: catColor, color: isBgLight ? "#0F172A" : "var(--text-main)" }}
+                  style={{
+                    backgroundColor: catColor,
+                    color: isBgLight ? "#0F172A" : "var(--text-main)",
+                    zIndex: idx + 1
+                  }}
                   onClick={() => setSelectedCatFilter(isSelected ? null : cat.id)}
                 >
-                  <div className="card-top">
-                    <div className="card-icon"><Icon size={18} /></div>
-                    <div style={{ display: "flex", gap: 6 }}>
+                  <div className="holder-top">
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div className="card-icon"><Icon size={20} /></div>
+                      <div>
+                        <div style={{ fontSize: 16, fontWeight: 800 }}>
+                          {cat.name} {cat.hasPin && <Lock size={13} style={{ marginLeft: 4 }} />}
+                        </div>
+                        <div style={{ fontSize: 11, opacity: 0.8, fontWeight: 600 }}>
+                          {isSelected ? "▲ Pulsado - Viendo Movimientos" : "▼ Pulsa para ver tarjeta y movimientos"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      {/* Acciones de Edición (Habilitables) */}
+                      {isEditMode && (
+                        <>
+                          <button className="btn-action" onClick={(e) => moveCategoryOrder(idx, -1, e)} title="Mover arriba/atrás">
+                            <ArrowLeft size={13} />
+                          </button>
+                          <button className="btn-action" onClick={(e) => moveCategoryOrder(idx, 1, e)} title="Mover abajo/adelante">
+                            <ArrowRight size={13} />
+                          </button>
+                          <button className="btn-action" onClick={(e) => openEditCategoryModal(cat, e)} title="Editar Sobre">
+                            <Edit2 size={13} />
+                          </button>
+                          <button className="btn-action" onClick={(e) => openAdjustBalanceModal(cat, e)} title="Modificar Saldo Manual">
+                            <DollarSign size={13} /> Saldo
+                          </button>
+                          <button className="btn-action" onClick={(e) => deleteCategory(cat.id, e)} title="Eliminar Sobre">
+                            <X size={13} />
+                          </button>
+                        </>
+                      )}
+
                       {cat.hasPin && (
                         <button className="btn-action" onClick={(e) => toggleUnlockCategory(cat, e)}>
-                          {isLocked ? <Eye size={14} /> : <EyeOff size={14} />}
+                          {isLocked ? <Eye size={13} /> : <EyeOff size={13} />}
                         </button>
                       )}
-                      <button className="btn-action" onClick={(e) => clearCategoryTransactions(cat.id, e)} title="Limpiar historial">
-                        <Trash2 size={14} />
-                      </button>
-                      <button className="btn-action" onClick={(e) => deleteCategory(cat.id, e)}>
-                        <X size={14} />
-                      </button>
+                      {!isEditMode && (
+                        <button className="btn-action" onClick={(e) => clearCategoryTransactions(cat.id, e)} title="Limpiar historial">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div style={{ fontSize: 16, fontWeight: 800 }}>
-                    {cat.name} {cat.hasPin && <Lock size={12} />}
-                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.8, fontWeight: 700 }}>
+                        Saldo Disponible
+                      </div>
+                      <div style={{ fontSize: 26, fontWeight: 800 }}>
+                        {isLocked ? "••••••" : money(stats.balance)}
+                      </div>
+                    </div>
 
-                  <div style={{ marginTop: 10, fontSize: 28, fontWeight: 800 }}>
-                    {isLocked ? "••••••" : money(stats.balance)}
-                  </div>
-
-                  <div style={{ display: "flex", justifyBetween: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
-                    <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
-                      + {isLocked ? "•••" : money(stats.income)}
-                    </span>
-                    <span className={`color-badge ${isBgLight ? "light-bg-expense" : "expense-contrast"}`}>
-                      - {isLocked ? "•••" : money(stats.expense)}
-                    </span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
+                        + {isLocked ? "•••" : money(stats.income)}
+                      </span>
+                      <span className={`color-badge ${isBgLight ? "light-bg-expense" : "expense-contrast"}`}>
+                        - {isLocked ? "•••" : money(stats.expense)}
+                      </span>
+                    </div>
                   </div>
 
                   {cat.targetGoal > 0 && !isLocked && (
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 10, opacity: 0.85, fontWeight: 600 }}>
-                        <span>Presupuesto: {money(cat.targetGoal)}</span>
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, opacity: 0.85, fontWeight: 600 }}>
+                        <span>Meta Presupuesto: {money(cat.targetGoal)}</span>
                         <span>{Math.round(progressPct)}%</span>
                       </div>
                       <div className="progress-bar-bg">
@@ -1078,12 +1357,12 @@ export default function App() {
           </div>
         </section>
 
-        {/* Sección de Gastos / Ingresos Recurrentes Mensuales */}
+        {/* 🔄 AUTOMATIZACIÓN RECURRENTE MENSUAL */}
         <section>
           <div className="section-header">
             <div className="section-title"><Calendar size={18} color="var(--yellow)" /> Automatización Recurrente Mensual</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" onClick={processMonthlyRecurrents}><RefreshCw size={15} /> Cargar Recurrentes de Este Mes</button>
+              <button className="btn-secondary" onClick={processMonthlyRecurrents}><RefreshCw size={15} /> Cargar Recurrentes del Mes</button>
               <button className="btn-primary" onClick={() => setShowRecurrentModal(true)}><Plus size={15} /> Nueva Regla Recurrente</button>
             </div>
           </div>
@@ -1149,11 +1428,19 @@ export default function App() {
           )}
         </section>
 
-        {/* Historial de Movimientos */}
+        {/* 📋 HISTORIAL DE MOVIMIENTOS (CON FILTRADO POR SOBRE PULSADO) */}
         <section>
           <div className="section-header">
-            <div className="section-title"><TrendingUp size={18} color="var(--green)" /> Historial de Movimientos</div>
+            <div className="section-title">
+              <TrendingUp size={18} color="var(--green)" /> 
+              {activeCategoryObj ? `Movimientos de: ${activeCategoryObj.name}` : "Historial General de Movimientos"}
+            </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {selectedCatFilter && (
+                <button className="btn-secondary" onClick={() => setSelectedCatFilter(null)}>
+                  Ver Todo el Historial
+                </button>
+              )}
               {transactions.length > 0 && (
                 <button className="btn-action" onClick={clearAllTransactions} style={{ color: "var(--red)" }}>
                   <Trash2 size={14} /> Vaciar Movimientos
@@ -1188,12 +1475,12 @@ export default function App() {
                 <div className="field">
                   <label>Tipo</label>
                   <select value={txType} onChange={(e) => setTxType(e.target.value)}>
-                    <option value="income">Asignar Fondo General ➔ Categoría (+)</option>
                     <option value="expense">Gasto de Categoría (-)</option>
+                    <option value="income">Asignar Fondo General ➔ Categoría (+)</option>
                   </select>
                 </div>
                 <div className="field">
-                  <label>Categoría</label>
+                  <label>Categoría / Sobre</label>
                   <select value={txCategory} onChange={(e) => setTxCategory(e.target.value)}>
                     <option value="">Selecciona...</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name} {c.hasPin ? "🔒" : ""}</option>)}
@@ -1223,7 +1510,7 @@ export default function App() {
           <div className="tx-list">
             {filteredTx.length === 0 ? (
               <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-muted)", fontSize: 13 }}>
-                No se encontraron registros.
+                No se encontraron registros en este filtro.
               </div>
             ) : (
               filteredTx.map((t) => {
@@ -1241,7 +1528,7 @@ export default function App() {
                       <div>
                         <div className="tx-title">
                           {t.concept}
-                          {t.recurrentId && <span className="recurrent-tag">Recorrente</span>}
+                          {t.recurrentId && <span className="recurrent-tag">Recurrente</span>}
                         </div>
                         <div className="tx-sub">{cat ? cat.name : "Fondo General"} • {t.date}</div>
                       </div>
