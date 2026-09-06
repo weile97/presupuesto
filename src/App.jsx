@@ -364,7 +364,7 @@ export default function App() {
           }
         })
         .catch(() => {});
-    }, 5000);
+    }, 20000);
 
     return () => clearInterval(interval);
   }, [data]);
@@ -375,7 +375,7 @@ export default function App() {
   const recurrents = data?.recurrents || [];
   const lastActiveMonth = data?.lastActiveMonth || currentMonthYear();
 
-  // Balancesss
+  // Balances
   const totalBaseIncome = useMemo(() => {
     return transactions
       .filter((t) => t.type === "payroll_income")
