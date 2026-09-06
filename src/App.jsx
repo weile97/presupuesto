@@ -64,32 +64,48 @@ function urlBase64ToUint8Array(base64String) {
 
 // Registra el Service Worker y suscribe este dispositivo a notificaciones push reales
 // (funcionan incluso con la app cerrada, siempre que el navegador lo permita).
+// Devuelve { ok, stage, error } para poder mostrar/depurar exactamente qué paso falló.
 async function subscribeToPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return { ok: false, stage: "unsupported", error: "Este navegador no soporta notificaciones push." };
+  }
+
+  let reg;
   try {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-
-    const reg = await navigator.serviceWorker.register("/sw.js");
+    reg = await navigator.serviceWorker.register("/sw.js");
     await navigator.serviceWorker.ready;
+  } catch (err) {
+    console.error("Error registrando el Service Worker (revisa que /sw.js exista en minúsculas en /public):", err);
+    return { ok: false, stage: "register", error: err.message };
+  }
 
-    let sub = await reg.pushManager.getSubscription();
+  let sub;
+  try {
+    sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
     }
+  } catch (err) {
+    console.error("Error creando la suscripción push:", err);
+    return { ok: false, stage: "subscribe", error: err.message };
+  }
 
-    await fetch("/api/subscribe", {
+  try {
+    const res = await fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub, deviceId: DEVICE_ID })
     });
-
-    return true;
+    if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
   } catch (err) {
-    console.error("Error activando notificaciones push:", err);
-    return false;
+    console.error("Error guardando la suscripción en el servidor (/api/subscribe):", err);
+    return { ok: false, stage: "server", error: err.message };
   }
+
+  return { ok: true, stage: "done", error: null };
 }
 
 const hashPin = (pin) => (pin ? btoa(pin.trim()) : "");
@@ -235,9 +251,19 @@ export default function App() {
     Notification.requestPermission().then(async (perm) => {
       setNotifPermission(perm);
       if (perm === "granted") {
-        const ok = await subscribeToPush();
-        showNotification(ok ? "Notificaciones activadas 🔔" : "Permiso concedido, pero no se pudo completar la suscripción push.");
-        new Notification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome" });
+        const result = await subscribeToPush();
+        if (result.ok) {
+          showNotification("Notificaciones activadas 🔔");
+          new Notification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome" });
+        } else {
+          const stageMsg = {
+            register: "No se encontró el archivo /sw.js en el servidor (revisa que se llame exactamente 'sw.js', en minúsculas).",
+            subscribe: "El navegador no pudo crear la suscripción push (revisa la clave VAPID).",
+            server: "No se pudo guardar la suscripción en el servidor.",
+            unsupported: "Este navegador no soporta notificaciones push."
+          };
+          showNotification(`Permiso concedido, pero falló: ${stageMsg[result.stage] || result.error}`, "error");
+        }
       } else {
         showNotification("No se han activado las notificaciones.", "error");
       }
@@ -247,7 +273,9 @@ export default function App() {
   // Si ya se había concedido permiso en una sesión anterior, renovamos la suscripción push silenciosamente.
   useEffect(() => {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      subscribeToPush();
+      subscribeToPush().then((result) => {
+        if (!result.ok) console.warn(`Re-suscripción push falló en el paso "${result.stage}":`, result.error);
+      });
     }
   }, []);
 
