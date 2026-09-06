@@ -364,7 +364,7 @@ export default function App() {
           }
         })
         .catch(() => {});
-    }, 20000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [data]);
