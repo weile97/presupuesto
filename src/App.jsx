@@ -375,7 +375,7 @@ export default function App() {
   const recurrents = data?.recurrents || [];
   const lastActiveMonth = data?.lastActiveMonth || currentMonthYear();
 
-  // Balances
+  // Balancesss
   const totalBaseIncome = useMemo(() => {
     return transactions
       .filter((t) => t.type === "payroll_income")
