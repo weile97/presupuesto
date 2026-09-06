@@ -64,48 +64,32 @@ function urlBase64ToUint8Array(base64String) {
 
 // Registra el Service Worker y suscribe este dispositivo a notificaciones push reales
 // (funcionan incluso con la app cerrada, siempre que el navegador lo permita).
-// Devuelve { ok, stage, error } para poder mostrar/depurar exactamente qué paso falló.
 async function subscribeToPush() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return { ok: false, stage: "unsupported", error: "Este navegador no soporta notificaciones push." };
-  }
-
-  let reg;
   try {
-    reg = await navigator.serviceWorker.register("/sw.js");
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+
+    const reg = await navigator.serviceWorker.register("/sw.js");
     await navigator.serviceWorker.ready;
-  } catch (err) {
-    console.error("Error registrando el Service Worker (revisa que /sw.js exista en minúsculas en /public):", err);
-    return { ok: false, stage: "register", error: err.message };
-  }
 
-  let sub;
-  try {
-    sub = await reg.pushManager.getSubscription();
+    let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
     }
-  } catch (err) {
-    console.error("Error creando la suscripción push:", err);
-    return { ok: false, stage: "subscribe", error: err.message };
-  }
 
-  try {
-    const res = await fetch("/api/subscribe", {
+    await fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub, deviceId: DEVICE_ID })
     });
-    if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
-  } catch (err) {
-    console.error("Error guardando la suscripción en el servidor (/api/subscribe):", err);
-    return { ok: false, stage: "server", error: err.message };
-  }
 
-  return { ok: true, stage: "done", error: null };
+    return true;
+  } catch (err) {
+    console.error("Error activando notificaciones push:", err);
+    return false;
+  }
 }
 
 const hashPin = (pin) => (pin ? btoa(pin.trim()) : "");
@@ -243,35 +227,18 @@ export default function App() {
   const [notifPermission, setNotifPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
   );
-  // idle | checking | ok | failed
-  const [pushStatus, setPushStatus] = useState({ state: "idle", detail: "" });
 
   function enableNotifications() {
     if (typeof Notification === "undefined") {
       return showNotification("Este navegador no soporta notificaciones.", "error");
     }
-    setPushStatus({ state: "checking", detail: "" });
     Notification.requestPermission().then(async (perm) => {
       setNotifPermission(perm);
       if (perm === "granted") {
-        const result = await subscribeToPush();
-        if (result.ok) {
-          setPushStatus({ state: "ok", detail: "" });
-          showNotification("Notificaciones activadas 🔔");
-          new Notification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome" });
-        } else {
-          const stageMsg = {
-            register: "No se encontró /sw.js (revisa que se llame exactamente 'sw.js', en minúsculas).",
-            subscribe: "El navegador no pudo crear la suscripción push (revisa la clave VAPID).",
-            server: "No se pudo guardar la suscripción en el servidor.",
-            unsupported: "Este navegador no soporta notificaciones push."
-          };
-          const detail = stageMsg[result.stage] || result.error;
-          setPushStatus({ state: "failed", detail });
-          showNotification(`Permiso concedido, pero falló: ${detail}`, "error");
-        }
+        const ok = await subscribeToPush();
+        showNotification(ok ? "Notificaciones activadas 🔔" : "Permiso concedido, pero no se pudo completar la suscripción push.");
+        new Notification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome" });
       } else {
-        setPushStatus({ state: "idle", detail: "" });
         showNotification("No se han activado las notificaciones.", "error");
       }
     });
@@ -280,15 +247,7 @@ export default function App() {
   // Si ya se había concedido permiso en una sesión anterior, renovamos la suscripción push silenciosamente.
   useEffect(() => {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      setPushStatus({ state: "checking", detail: "" });
-      subscribeToPush().then((result) => {
-        if (result.ok) {
-          setPushStatus({ state: "ok", detail: "" });
-        } else {
-          console.warn(`Re-suscripción push falló en el paso "${result.stage}":`, result.error);
-          setPushStatus({ state: "failed", detail: result.error || result.stage });
-        }
-      });
+      subscribeToPush();
     }
   }, []);
 
@@ -1045,8 +1004,6 @@ export default function App() {
         .brand-title { font-weight: 800; font-size: 18px; }
         .brand-sub { font-size: 12px; color: var(--text-muted); font-weight: 500; }
         .btn-icon-square { background: #1E293B; color: var(--text-main); border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .btn-icon-square.notif-ok { background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34D399; }
-        .btn-icon-square.notif-failed { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #FCA5A5; }
         .main-content { max-width: 1100px; margin: 20px auto 0; padding: 0 16px; }
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px; }
         .summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
@@ -1189,28 +1146,10 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {notifPermission !== "unsupported" && (
-              <button
-                className={`btn-icon-square ${pushStatus.state === "ok" ? "notif-ok" : pushStatus.state === "failed" ? "notif-failed" : ""}`}
-                onClick={enableNotifications}
-                title={
-                  pushStatus.state === "ok"
-                    ? "Notificaciones activas. Pulsa para volver a comprobar."
-                    : pushStatus.state === "failed"
-                    ? `Error: ${pushStatus.detail}. Pulsa para reintentar.`
-                    : "Activar notificaciones"
-                }
-              >
+            {notifPermission !== "granted" && notifPermission !== "unsupported" && (
+              <button className="btn-icon-square" onClick={enableNotifications} title="Activar notificaciones">
                 <BellRing size={17} />
-                <span className="btn-label">
-                  {pushStatus.state === "checking"
-                    ? " Comprobando..."
-                    : pushStatus.state === "ok"
-                    ? " Avisos activos ✓"
-                    : pushStatus.state === "failed"
-                    ? " Avisos: error ⚠️"
-                    : " Activar avisos"}
-                </span>
+                <span className="btn-label"> Activar avisos</span>
               </button>
             )}
             <button className="btn-secondary" onClick={exportCSV}><Download size={15} /> <span className="btn-label">Exportar CSV</span></button>
@@ -1992,4 +1931,3 @@ export default function App() {
     </div>
   );
 }
-
