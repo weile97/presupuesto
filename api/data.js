@@ -103,34 +103,21 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const stored = await redis.get(DATA_KEY);
-      let data = defaultData;
-
-      if (stored) {
-        data = typeof stored === 'string' ? JSON.parse(stored) : stored;
-      }
-
+      const data = stored ? (typeof stored === 'string' ? JSON.parse(stored) : stored) : defaultData;
       return res.status(200).json(data);
     }
 
     if (req.method === 'POST') {
-      const body = req.body || {};
+      const bodyData = req.body;
+      
+      // Extrae la estructura de datos y la acción realizada
+      const payloadData = bodyData.data || bodyData;
+      const customMessage = bodyData.actionMessage || 'Se ha actualizado el presupuesto 💌';
 
-      // Detectar automáticamente si los datos vienen en `body.data` o directamente en `body`
-      let payloadData;
-      let customMessage = body.actionMessage || 'Se ha actualizado el presupuesto 💌';
-
-      if (body.data && typeof body.data === 'object' && (body.data.sources || body.data.categories || body.data.transactions)) {
-        payloadData = body.data;
-      } else {
-        payloadData = { ...body };
-        delete payloadData.actionMessage; // Limpiar propiedad extra para no corromper la estructura de datos
-      }
-
-      // Guardar exactamente el objeto de datos original en Redis
       await redis.set(DATA_KEY, JSON.stringify(payloadData));
 
-      // Notificar en segundo plano a la pareja
-      notifySubscribers(redis, customMessage, payloadData.lastEditedBy);
+      // Notificar a la otra persona con el mensaje exacto de la acción
+      await notifySubscribers(redis, customMessage, payloadData.lastEditedBy);
 
       return res.status(200).json({ ok: true, data: payloadData });
     }
