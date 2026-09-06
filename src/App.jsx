@@ -369,6 +369,41 @@ export default function App() {
     return () => clearInterval(interval);
   }, [data]);
 
+  // Función para guardar los datos y enviar el mensaje exacto
+async function syncDataWithAction(updatedData, actionMessage) {
+  try {
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: updatedData,
+        actionMessage: actionMessage
+      })
+    });
+  } catch (err) {
+    console.error('Error al guardar datos:', err);
+  }
+}
+
+// EJEMPLOS DE USO EN TU CÓDIGO DE LA APP:
+
+// 1. Cuando ingresas dinero
+syncDataWithAction(data, "Se ha ingresado dinero 💵");
+
+// 2. Cuando sacas o registras un gasto
+syncDataWithAction(data, "Se ha retirado dinero 💸");
+
+// 3. Cuando creas un sobre / categoría
+syncDataWithAction(data, "Se ha creado un sobre 💌");
+
+// 4. Cuando borras un sobre o movimiento
+syncDataWithAction(data, "Se ha eliminado un sobre 🗑️");
+
+// 5. Cuando haces un traspaso entre sobres
+syncDataWithAction(data, "Se ha realizado un traspaso 🔄");
+
+// 6. Cuando editas o actualizas un sobre
+syncDataWithAction(data, "Se ha actualizado un sobre ✏️");
   const sources = data?.sources || [];
   const categories = data?.categories || [];
   const transactions = data?.transactions || [];

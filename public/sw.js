@@ -1,10 +1,9 @@
 // public/sw.js
 
-// Escucha del evento push proveniente del servidor WebPush
 self.addEventListener('push', (event) => {
   let data = {
     title: 'M&J 🦄',
-    body: 'Se ha realizado una actualización en las finanzas.'
+    body: 'Se ha realizado un movimiento en la cuenta 💌'
   };
 
   if (event.data) {
@@ -31,7 +30,6 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Redireccionar o enfocar la app al hacer clic en la notificación
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -49,12 +47,10 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Instalación inmediata del Service Worker
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activación y toma de control inmediata
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
