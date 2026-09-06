@@ -63,6 +63,8 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // Registra el Service Worker y suscribe este dispositivo a notificaciones push reales
+// (funcionan incluso con la app cerrada, siempre que el navegador lo permita).
+// Devuelve { ok, stage, error } para poder mostrar/depurar exactamente qué paso falló.
 async function subscribeToPush() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     return { ok: false, stage: "unsupported", error: "Este navegador no soporta notificaciones push." };
@@ -73,7 +75,7 @@ async function subscribeToPush() {
     reg = await navigator.serviceWorker.register("/sw.js");
     await navigator.serviceWorker.ready;
   } catch (err) {
-    console.error("Error registrando el Service Worker:", err);
+    console.error("Error registrando el Service Worker (revisa que /sw.js exista en minúsculas en /public):", err);
     return { ok: false, stage: "register", error: err.message };
   }
 
@@ -241,6 +243,7 @@ export default function App() {
   const [notifPermission, setNotifPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
   );
+  // idle | checking | ok | failed
   const [pushStatus, setPushStatus] = useState({ state: "idle", detail: "" });
 
   function enableNotifications() {
@@ -274,6 +277,7 @@ export default function App() {
     });
   }
 
+  // Si ya se había concedido permiso en una sesión anterior, renovamos la suscripción push silenciosamente.
   useEffect(() => {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       setPushStatus({ state: "checking", detail: "" });
@@ -302,6 +306,8 @@ export default function App() {
       })
       .catch((err) => {
         console.error("Error cargando base de datos:", err);
+        // Importante: NO ponemos data en un objeto vacío. Si el servidor falla,
+        // mostramos un aviso claro en vez de dar la impresión de que se han borrado los datos.
         setLoadError(true);
         setLoading(false);
       });
@@ -319,19 +325,17 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [unlockedCats]);
 
-  const updateDataAndSave = (newData, actionMessage = "") => {
+  const updateDataAndSave = (newData) => {
     const stamped = { ...newData, lastEditedBy: DEVICE_ID, lastEditedAt: Date.now() };
     setData(stamped);
     fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        data: stamped,
-        actionMessage: actionMessage
-      })
+      body: JSON.stringify(stamped)
     }).catch((err) => console.error("Error guardando datos:", err));
   };
 
+  // Sondeo periódico: si la pareja hace un cambio en otro dispositivo, lo detectamos y avisamos.
   useEffect(() => {
     if (!data) return;
 
@@ -343,8 +347,8 @@ export default function App() {
         })
         .then((remote) => {
           if (!remote || !remote.lastEditedAt) return;
-          if (remote.lastEditedBy === DEVICE_ID) return;
-          if (remote.lastEditedAt <= (data.lastEditedAt || 0)) return;
+          if (remote.lastEditedBy === DEVICE_ID) return; // cambio propio, ya lo tenemos
+          if (remote.lastEditedAt <= (data.lastEditedAt || 0)) return; // nada nuevo
 
           const oldTxCount = (data.transactions || []).length;
           const newTxCount = (remote.transactions || []).length;
@@ -433,7 +437,7 @@ export default function App() {
     updateDataAndSave({
       ...data,
       transactions: [newTx, ...transactions]
-    }, "Se ha ingresado dinero 💵");
+    });
 
     showNotification(`Se han añadido ${money(amt)} al Fondo General.`);
     setDepositSourceModal(null);
@@ -484,7 +488,7 @@ export default function App() {
     updateDataAndSave({
       ...data,
       transactions: [...newTransactions, ...transactions]
-    }, "Se ha ingresado dinero 💵");
+    });
 
     showNotification(`Se han añadido ${money(totalAdded)} al Fondo General.`);
     setShowBulkPayroll(false);
@@ -602,7 +606,7 @@ export default function App() {
             }
           : c
       );
-      updateDataAndSave({ ...data, categories: updatedCats }, "Se ha actualizado un sobre ✏️");
+      updateDataAndSave({ ...data, categories: updatedCats });
       showNotification("Sobre actualizado.");
     } else {
       const newCat = {
@@ -616,7 +620,7 @@ export default function App() {
         targetGoal: isNaN(goalParsed) ? 0 : goalParsed,
         initialBalance: 0
       };
-      updateDataAndSave({ ...data, categories: [...categories, newCat] }, "Se ha creado un sobre 💌");
+      updateDataAndSave({ ...data, categories: [...categories, newCat] });
       showNotification("Categoría creada con éxito.");
     }
 
@@ -642,7 +646,7 @@ export default function App() {
       date: todayISO()
     };
 
-    updateDataAndSave({ ...data, transactions: [newTx, ...transactions] }, "Se ha actualizado un sobre ✏️");
+    updateDataAndSave({ ...data, transactions: [newTx, ...transactions] });
     setCatAdjustAmount("");
     showNotification(`Saldo de "${cat.name}" ajustado en ${amt > 0 ? "+" : ""}${money(amt)}. No afecta al Fondo General.`);
   }
@@ -673,7 +677,7 @@ export default function App() {
       ...data,
       categories: categories.filter((c) => c.id !== id),
       transactions: transactions.filter((t) => t.categoryId !== id)
-    }, "Se ha eliminado un sobre 🗑️");
+    });
     showNotification("Categoría eliminada.");
   }
 
@@ -688,14 +692,14 @@ export default function App() {
       updateDataAndSave({
         ...data,
         transactions: transactions.filter((t) => t.categoryId !== catId)
-      }, "Se ha eliminado un movimiento 🗑️");
+      });
       showNotification("Historial de categoría limpiado.");
     }
   }
 
   function clearAllTransactions() {
     if (window.confirm("⚠️ ¿Vaciar todo el historial de movimientos del proyecto?")) {
-      updateDataAndSave({ ...data, transactions: [] }, "Se ha eliminado un movimiento 🗑️");
+      updateDataAndSave({ ...data, transactions: [] });
       showNotification("Historial global vaciado.");
     }
   }
@@ -762,7 +766,7 @@ export default function App() {
       updateDataAndSave({
         ...data,
         transactions: transactions.filter((item) => item.id !== tId)
-      }, "Se ha eliminado un movimiento 🗑️");
+      });
       showNotification("Movimiento eliminado.");
     }
   }
@@ -792,8 +796,6 @@ export default function App() {
       }
     }
 
-    const actionMsg = txType === "expense" ? "Se ha retirado dinero 💸" : "Se ha ingresado dinero 💵";
-
     if (editingTxId) {
       const updatedTxs = transactions.map((t) => {
         if (t.id === editingTxId) {
@@ -808,7 +810,7 @@ export default function App() {
         }
         return t;
       });
-      updateDataAndSave({ ...data, transactions: updatedTxs }, actionMsg);
+      updateDataAndSave({ ...data, transactions: updatedTxs });
       showNotification("Movimiento actualizado.");
     } else {
       const newTx = {
@@ -820,7 +822,7 @@ export default function App() {
         amount: amt,
         date: txDate || todayISO()
       };
-      updateDataAndSave({ ...data, transactions: [newTx, ...transactions] }, actionMsg);
+      updateDataAndSave({ ...data, transactions: [newTx, ...transactions] });
       showNotification("Movimiento registrado correctamente.");
     }
 
@@ -903,7 +905,7 @@ export default function App() {
       return showNotification("Todos los recurrentes de este mes ya fueron aplicados.", "error");
     }
 
-    updateDataAndSave({ ...data, transactions: newTransactions }, "Se ha retirado dinero 💸");
+    updateDataAndSave({ ...data, transactions: newTransactions });
     showNotification(`Se aplicaron ${appliedCount} cargos/ingresos recurrentes.`);
   }
 
@@ -958,7 +960,7 @@ export default function App() {
     updateDataAndSave({
       ...data,
       transactions: [transferTx1, transferTx2, ...transactions]
-    }, "Se ha realizado un traspaso 🔄");
+    });
 
     setShowTransferModal(false); setTransferAmount("");
     showNotification(`Traspaso de ${money(amt)} completado.`);
@@ -1037,7 +1039,7 @@ export default function App() {
         .app-container { min-height: 100vh; padding-bottom: calc(60px + env(safe-area-inset-bottom)); overflow-x: hidden; }
         .loading-screen { color: #F8FAFC; padding: 60px; text-align: center; font-weight: 700; }
         .header { background: rgba(21, 28, 40, 0.7); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
-        .header-inner { max-width: 1100px; margin: 0 auto; display: flex; justify-space-between; align-items: center; gap: 10px; }
+        .header-inner { max-width: 1100px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
         .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .brand-logo { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--pink-primary), var(--purple-accent)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; flex-shrink: 0; }
         .brand-title { font-weight: 800; font-size: 18px; }
@@ -1573,7 +1575,7 @@ export default function App() {
                     {isLocked ? "••••••" : money(stats.balance)}
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
+                  <div style={{ display: "flex", justifyBetween: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
                     <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
                       + {isLocked ? "•••" : money(stats.income)}
                     </span>
