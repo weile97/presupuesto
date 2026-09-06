@@ -31,7 +31,7 @@ async function getWebPush() {
   webpushChecked = true;
   try {
     if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-      console.warn('Claves VAPID no configuradas en las variables de entorno.');
+      console.warn('Claves VAPID no configuradas.');
       return null;
     }
     const mod = await import('web-push');
@@ -44,7 +44,7 @@ async function getWebPush() {
     webpushLib = webpush;
     return webpushLib;
   } catch (err) {
-    console.error('Error al importar la librería web-push:', err);
+    console.error('Error al importar web-push:', err);
     return null;
   }
 }
@@ -110,13 +110,14 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const bodyData = req.body;
       
-      // Extrae la estructura de datos y la acción realizada
+      // Si el cliente envía `actionMessage`, usamos ese texto dinámico.
+      // Si envía todo el objeto de datos, extraemos la propiedad o usamos el texto por defecto.
       const payloadData = bodyData.data || bodyData;
-      const customMessage = bodyData.actionMessage || 'Se ha actualizado el presupuesto 💌';
+      const customMessage = bodyData.actionMessage || 'Se ha actualizado un sobre 💌';
 
       await redis.set(DATA_KEY, JSON.stringify(payloadData));
 
-      // Notificar a la otra persona con el mensaje exacto de la acción
+      // Notificar a la otra persona
       await notifySubscribers(redis, customMessage, payloadData.lastEditedBy);
 
       return res.status(200).json({ ok: true, data: payloadData });
