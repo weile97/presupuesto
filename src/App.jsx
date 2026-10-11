@@ -10,7 +10,9 @@ import {
 } from "lucide-react";
 
 const API_URL = "/api/data";
-const EMPTY = Object.freeze([]); // referencia estable para no invalidar los useMemo en cada render
+const EMPTY = Object.freeze([]);
+// En pantallas táctiles el arrastre HTML5 captura el gesto y bloquea el scroll
+const CAN_DRAG = typeof window !== "undefined" && window.matchMedia?.("(pointer: fine)").matches; // referencia estable para no invalidar los useMemo en cada render
 
 const CAT_ICONS = {
   paw: PawPrint, food: UtensilsCrossed, alert: AlertTriangle, home: Home,
@@ -1447,7 +1449,7 @@ export default function App() {
                   key={cat.id}
                   style={{ backgroundColor: catColor, color: isBgLight ? "#0F172A" : "var(--text-main)" }}
                   onClick={() => setViewingCategoryId(cat.id)}
-                  draggable
+                  draggable={CAN_DRAG}
                   onDragStart={(e) => { e.stopPropagation(); setDragCatId(cat.id); }}
                   onDragOver={(e) => { e.preventDefault(); if (dragOverCatId !== cat.id) setDragOverCatId(cat.id); }}
                   onDragLeave={() => setDragOverCatId((prev) => (prev === cat.id ? null : prev))}
