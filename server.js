@@ -31,14 +31,16 @@ const INITIAL_STATE = {
   transactions: []
 };
 
+// Misma API que api/data.js (con versión _rev para detectar conflictos)
+let rev = 0;
+const readData = () => {
+  if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify(INITIAL_STATE, null, 2));
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+};
+
 app.get('/api/data', (req, res) => {
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(INITIAL_STATE, null, 2));
-    return res.json(INITIAL_STATE);
-  }
   try {
-    const rawData = fs.readFileSync(DATA_FILE, 'utf-8');
-    res.json(JSON.parse(rawData));
+    res.set('Cache-Control', 'no-store').json({ ...readData(), _rev: String(rev) });
   } catch (error) {
     res.status(500).json({ error: "Error leyendo data.json" });
   }
@@ -46,8 +48,16 @@ app.get('/api/data', (req, res) => {
 
 app.post('/api/data', (req, res) => {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
-    res.json({ success: true });
+    const { data, baseRev } = req.body || {};
+    if (!data || !Array.isArray(data.transactions) || !Array.isArray(data.categories)) {
+      return res.status(400).json({ error: "Datos con formato inválido" });
+    }
+    if (String(baseRev) !== String(rev)) {
+      return res.status(409).json({ conflict: true, data: readData(), _rev: String(rev) });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    rev += 1;
+    res.json({ success: true, _rev: String(rev) });
   } catch (error) {
     res.status(500).json({ error: "Error guardando en data.json" });
   }

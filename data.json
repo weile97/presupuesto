@@ -1,28 +1,5 @@
 {
-  "lastActiveMonth": "2026-09",
-  "sources": [
-    {
-      "id": "src-josna",
-      "name": "Nómina Josna",
-      "icon": "banknote",
-      "color": "#3B82F6",
-      "amount": 1100
-    },
-    {
-      "id": "src-meli",
-      "name": "Nómina Meli",
-      "icon": "piggy",
-      "color": "#EC4899",
-      "amount": 1300
-    },
-    {
-      "id": "src-propinas",
-      "name": "Propinas Meli 🍸",
-      "icon": "coins",
-      "color": "#F59E0B",
-      "amount": 0
-    }
-  ],
+  "lastActiveMonth": "2026-10",
   "categories": [
     {
       "id": "cat-mascotas",
@@ -35,7 +12,7 @@
     },
     {
       "id": "cat-comida",
-      "name": "Alimentación",
+      "name": "Alimentaci�n",
       "icon": "food",
       "color": "#F59E0B",
       "hasPin": false,
@@ -165,7 +142,7 @@
     },
     {
       "id": "mtm9wf6yqru150",
-      "concept": "Cobro Nómina Meli",
+      "concept": "Cobro N�mina Meli",
       "categoryId": null,
       "sourceId": "src-meli",
       "type": "payroll_income",
@@ -174,7 +151,7 @@
     },
     {
       "id": "mtm9we0cz9bxpc",
-      "concept": "Cobro Nómina Josna",
+      "concept": "Cobro N�mina Josna",
       "categoryId": null,
       "sourceId": "src-josna",
       "type": "payroll_income",
@@ -182,5 +159,28 @@
       "date": "2026-09-04"
     }
   ],
-  "generalFund": 2350
+  "sources": [
+    {
+      "id": "src-josna",
+      "name": "N�mina Josna",
+      "icon": "banknote",
+      "color": "#3B82F6",
+      "amount": 1100
+    },
+    {
+      "id": "src-meli",
+      "name": "N�mina Meli",
+      "icon": "piggy",
+      "color": "#EC4899",
+      "amount": 1300
+    },
+    {
+      "id": "src-propinas",
+      "name": "Propinas Meli ??",
+      "icon": "coins",
+      "color": "#F59E0B",
+      "amount": 0
+    }
+  ],
+  "recurrents": []
 }

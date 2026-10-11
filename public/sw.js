@@ -1,4 +1,4 @@
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -9,20 +9,26 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('push', (event) => {
   let data = { title: 'M&J 🦄', body: 'Hay novedades en vuestro presupuesto.' };
   try {
-    if (event.data) data = event.data.json();
-  } catch (e) {
-    // si no viene como JSON, usamos el mensaje por defecto
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    if (event.data) data.body = event.data.text();
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'M&J 🦄', {
-      body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      tag: 'mj-push',
-      renotify: true,
-      vibrate: [80, 40, 80]
-    })
+    (async () => {
+      // Avisamos a las pestañas abiertas para que recarguen los datos al instante
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clientList.forEach((c) => c.postMessage({ type: 'mj-data-changed' }));
+
+      await self.registration.showNotification(data.title || 'M&J 🦄', {
+        body: data.body || '',
+        icon: '/favicon.svg',
+        tag: 'mj-push',
+        renotify: true,
+        vibrate: [80, 40, 80],
+        data: { url: '/' }
+      });
+    })()
   );
 });
 

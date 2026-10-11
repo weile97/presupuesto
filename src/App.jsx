@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   PawPrint, UtensilsCrossed, AlertTriangle, Home, Car, ShoppingBag,
   Plane, Gift, Heart, Wallet, Plus, Check, Banknote, PiggyBank,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 const API_URL = "/api/data";
+const EMPTY = Object.freeze([]); // referencia estable para no invalidar los useMemo en cada render
 
 const CAT_ICONS = {
   paw: PawPrint, food: UtensilsCrossed, alert: AlertTriangle, home: Home,
@@ -68,31 +69,79 @@ async function subscribeToPush() {
   try {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
 
-    const reg = await navigator.serviceWorker.register("/sw.js");
-    await navigator.serviceWorker.ready;
+    await navigator.serviceWorker.register("/sw.js");
+    const reg = await navigator.serviceWorker.ready;
+    const appKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
     let sub = await reg.pushManager.getSubscription();
+    // Si la suscripción se creó con otra clave VAPID, el servidor no puede usarla: la renovamos
+    const oldKey = sub?.options?.applicationServerKey;
+    if (sub && oldKey && new Uint8Array(oldKey).toString() !== appKey.toString()) {
+      await sub.unsubscribe();
+      sub = null;
+    }
     if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      });
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
     }
 
-    await fetch("/api/subscribe", {
+    const res = await fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: sub, deviceId: DEVICE_ID })
+      body: JSON.stringify({ subscription: sub.toJSON(), deviceId: DEVICE_ID })
     });
 
-    return true;
+    return res.ok;
   } catch (err) {
     console.error("Error activando notificaciones push:", err);
     return false;
   }
 }
 
-const hashPin = (pin) => (pin ? btoa(pin.trim()) : "");
+// --- Fusión de cambios (cuando los dos móviles editan a la vez) ---------
+// base = último estado confirmado por el servidor, local = mis cambios, remote = lo que hay ahora en el servidor.
+// Se aplican sobre "remote" solo los elementos que YO he añadido, modificado o borrado respecto a "base".
+function mergeById(baseArr = [], localArr = [], remoteArr = []) {
+  if (![...baseArr, ...localArr, ...remoteArr].every((x) => x && x.id != null)) return localArr;
+  const b = new Map(baseArr.map((x) => [x.id, x]));
+  const l = new Map(localArr.map((x) => [x.id, x]));
+  const result = new Map(remoteArr.map((x) => [x.id, x]));
+  for (const id of b.keys()) if (!l.has(id)) result.delete(id);
+  for (const [id, item] of l) {
+    const old = b.get(id);
+    if (!old || JSON.stringify(old) !== JSON.stringify(item)) result.set(id, item);
+  }
+  const sameOrder = (x, y) => x.length === y.length && x.every((it, i) => it.id === y[i].id);
+  const orderSrc = sameOrder(baseArr, localArr) ? remoteArr : localArr;
+  const ordered = orderSrc.filter((x) => result.has(x.id)).map((x) => result.get(x.id));
+  const seen = new Set(ordered.map((x) => x.id));
+  for (const [id, item] of result) if (!seen.has(id)) ordered.push(item);
+  return ordered;
+}
+
+function mergeData(base, local, remote) {
+  if (!base) return local;
+  const merged = { ...remote, ...local };
+  for (const k of ["sources", "categories", "transactions", "recurrents"]) {
+    merged[k] = mergeById(base[k], local[k], remote[k]);
+  }
+  if (local.lastActiveMonth === base.lastActiveMonth) merged.lastActiveMonth = remote.lastActiveMonth;
+  return merged;
+}
+
+function describeChange(prev, next) {
+  const len = (d, k) => (d?.[k] || []).length;
+  if (len(next, "transactions") > len(prev, "transactions")) return "Se ha añadido un nuevo movimiento 💸";
+  if (len(next, "transactions") < len(prev, "transactions")) return "Se ha eliminado un movimiento 🗑️";
+  if (len(next, "categories") !== len(prev, "categories")) return "Se ha actualizado un sobre 💌";
+  return "Vuestro presupuesto M&J se ha actualizado ✨";
+}
+
+const splitRemote = (remote) => {
+  const { _rev, ...rest } = remote || {};
+  return [rest, String(_rev ?? "0")];
+};
+
+const hashPin =(pin) => (pin ? btoa(pin.trim()) : "");
 
 const isLightColor = (hex) => {
   if (!hex || typeof hex !== "string" || !hex.startsWith("#")) return false;
@@ -223,21 +272,27 @@ export default function App() {
   const showNotification = (message, type = "success") => {
     setToast({ message, type });
   };
+  // Estable entre renders: si no, el temporizador del toast se reinicia en cada render y no se cierra
+  const closeToast = useCallback(() => setToast(null), []);
 
   const [notifPermission, setNotifPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
   );
 
   function enableNotifications() {
-    if (typeof Notification === "undefined") {
-      return showNotification("Este navegador no soporta notificaciones.", "error");
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
+      // En iPhone solo funcionan si la app está añadida a la pantalla de inicio
+      return showNotification("Para recibir avisos en iPhone: Compartir → Añadir a pantalla de inicio y abre la app desde ahí.", "error");
     }
     Notification.requestPermission().then(async (perm) => {
       setNotifPermission(perm);
       if (perm === "granted") {
         const ok = await subscribeToPush();
-        showNotification(ok ? "Notificaciones activadas 🔔" : "Permiso concedido, pero no se pudo completar la suscripción push.");
-        new Notification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome" });
+        showNotification(ok ? "Notificaciones activadas 🔔" : "Permiso concedido, pero no se pudo completar la suscripción push.", ok ? "success" : "error");
+        // En Android "new Notification()" lanza error: hay que usar el Service Worker
+        navigator.serviceWorker.ready
+          .then((reg) => reg.showNotification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome", icon: "/favicon.svg" }))
+          .catch(() => {});
       } else {
         showNotification("No se han activado las notificaciones.", "error");
       }
@@ -253,14 +308,95 @@ export default function App() {
 
   const [loadError, setLoadError] = useState(false);
 
+  // --- Sincronización con el servidor ---------------------------------
+  const revRef = useRef("0");        // versión del servidor sobre la que trabajamos
+  const baseRef = useRef(null);      // último estado confirmado por el servidor
+  const dataRef = useRef(null);      // estado local más reciente
+  const pendingRef = useRef(false);  // hay cambios locales sin guardar
+  const busyRef = useRef(false);     // hay un guardado en curso
+  const saveChainRef = useRef(Promise.resolve());
+
+  const applyRemote = useCallback((remote) => {
+    const [remoteData, rev] = splitRemote(remote);
+    revRef.current = rev;
+    baseRef.current = remoteData;
+    dataRef.current = remoteData;
+    setData(remoteData);
+    return remoteData;
+  }, []);
+
+  const flushSave = useCallback(() => {
+    saveChainRef.current = saveChainRef.current.then(async () => {
+      if (!pendingRef.current) return;
+      pendingRef.current = false;
+      busyRef.current = true;
+      try {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const toSend = dataRef.current;
+          const res = await fetch(API_URL, {
+            method: "POST",
+            cache: "no-store",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: toSend, baseRev: revRef.current })
+          });
+          const body = await res.json().catch(() => ({}));
+
+          if (res.ok) {
+            revRef.current = String(body._rev ?? revRef.current);
+            baseRef.current = toSend;
+            return;
+          }
+          if (res.status === 409 && body.data) {
+            // La otra persona guardó antes: fusionamos sus cambios con los míos y reintentamos
+            const [remoteData, rev] = splitRemote({ ...body.data, _rev: body._rev });
+            const merged = mergeData(baseRef.current, dataRef.current, remoteData);
+            baseRef.current = remoteData;
+            revRef.current = rev;
+            dataRef.current = merged;
+            setData(merged);
+            continue;
+          }
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        throw new Error("Demasiados conflictos seguidos");
+      } catch (err) {
+        console.error("Error guardando datos:", err);
+        pendingRef.current = true; // se reintentará al volver la conexión / en el siguiente sondeo
+        setToast({ message: "No se pudo guardar. Se reintentará automáticamente.", type: "error" });
+      } finally {
+        busyRef.current = false;
+      }
+    });
+    return saveChainRef.current;
+  }, []);
+
+  const refreshFromServer = useCallback(async (notify = true) => {
+    if (pendingRef.current) return flushSave();
+    if (busyRef.current) return;
+    try {
+      const res = await fetch(API_URL, { cache: "no-store" });
+      if (!res.ok) return;
+      const remote = await res.json();
+      // Si mientras tanto hubo cambios locales o la versión no cambió, no tocamos nada
+      if (pendingRef.current || busyRef.current || String(remote._rev ?? "0") === revRef.current) return;
+      const prev = dataRef.current;
+      const next = applyRemote(remote);
+      if (notify && prev && next.lastEditedBy !== DEVICE_ID) {
+        setToast({ message: describeChange(prev, next), type: "success" });
+      }
+    } catch {
+      // sin conexión: se intentará en el siguiente ciclo
+    }
+  }, [applyRemote, flushSave]);
+
   useEffect(() => {
-    fetch(API_URL)
+    fetch(API_URL, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((dataFromFile) => {
-        setData(dataFromFile || {});
+      .then((remote) => {
+        applyRemote(remote);
         setLoading(false);
       })
       .catch((err) => {
@@ -270,7 +406,7 @@ export default function App() {
         setLoadError(true);
         setLoading(false);
       });
-  }, []);
+  }, [applyRemote]);
 
   useEffect(() => {
     const activeUnlocked = Object.keys(unlockedCats).filter((id) => unlockedCats[id]);
@@ -286,52 +422,38 @@ export default function App() {
 
   const updateDataAndSave = (newData) => {
     const stamped = { ...newData, lastEditedBy: DEVICE_ID, lastEditedAt: Date.now() };
+    dataRef.current = stamped;
+    pendingRef.current = true;
     setData(stamped);
-    fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(stamped)
-    }).catch((err) => console.error("Error guardando datos:", err));
+    flushSave();
   };
 
-  // Sondeo periódico: si la pareja hace un cambio en otro dispositivo, lo detectamos y avisamos.
+  // Sondeo: solo con la app visible (ahorra batería); al volver a primer plano, al recuperar
+  // conexión o al llegar un push, se refresca al instante.
   useEffect(() => {
-    if (!data) return;
+    if (loading) return;
+    const tick = () => { if (document.visibilityState === "visible") refreshFromServer(); };
+    const interval = setInterval(tick, 15000);
+    const onSwMessage = (e) => { if (e.data?.type === "mj-data-changed") refreshFromServer(); };
+    const onBeforeUnload = (e) => { if (pendingRef.current || busyRef.current) e.preventDefault(); };
 
-    const interval = setInterval(() => {
-      fetch(API_URL)
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-        .then((remote) => {
-          if (!remote || !remote.lastEditedAt) return;
-          if (remote.lastEditedBy === DEVICE_ID) return; // cambio propio, ya lo tenemos
-          if (remote.lastEditedAt <= (data.lastEditedAt || 0)) return; // nada nuevo
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("online", tick);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    navigator.serviceWorker?.addEventListener("message", onSwMessage);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("online", tick);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      navigator.serviceWorker?.removeEventListener("message", onSwMessage);
+    };
+  }, [loading, refreshFromServer]);
 
-          const oldTxCount = (data.transactions || []).length;
-          const newTxCount = (remote.transactions || []).length;
-          let msg = "Vuestro presupuesto M&J se ha actualizado.";
-          if (newTxCount > oldTxCount) msg = "Se ha añadido un nuevo movimiento 💸";
-          else if (newTxCount < oldTxCount) msg = "Se ha eliminado un movimiento 🗑️";
-          else if ((remote.categories || []).length !== (data.categories || []).length) msg = "Se ha actualizado un sobre 💌";
-
-          setData(remote);
-          showNotification(msg);
-          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("M&J 🦄", { body: msg, tag: "mj-update" });
-          }
-        })
-        .catch(() => {});
-    }, 20000);
-
-    return () => clearInterval(interval);
-  }, [data]);
-
-  const sources = data?.sources || [];
-  const categories = data?.categories || [];
-  const transactions = data?.transactions || [];
-  const recurrents = data?.recurrents || [];
+  const sources = data?.sources || EMPTY;
+  const categories = data?.categories || EMPTY;
+  const transactions = data?.transactions || EMPTY;
+  const recurrents = data?.recurrents || EMPTY;
   const lastActiveMonth = data?.lastActiveMonth || currentMonthYear();
 
   // Balances
@@ -984,157 +1106,8 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        :root {
-          --bg-main: #0B0F17; --bg-card: #151C28; --border: rgba(255, 255, 255, 0.08);
-          --border-accent: rgba(236, 72, 153, 0.3); --pink-primary: #EC4899;
-          --purple-accent: #8B5CF6; --text-main: #F8FAFC; --text-muted: #94A3B8;
-          --green: #10B981; --red: #EF4444; --yellow: #F59E0B;
-        }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html { overflow-x: hidden; }
-        body { margin: 0; background-color: var(--bg-main); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; overflow-x: hidden; }
-        .app-container { min-height: 100vh; padding-bottom: calc(60px + env(safe-area-inset-bottom)); overflow-x: hidden; }
-        .loading-screen { color: #F8FAFC; padding: 60px; text-align: center; font-weight: 700; }
-        .header { background: rgba(21, 28, 40, 0.7); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
-        .header-inner { max-width: 1100px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-        .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .brand-logo { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--pink-primary), var(--purple-accent)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; flex-shrink: 0; }
-        .brand-title { font-weight: 800; font-size: 18px; }
-        .brand-sub { font-size: 12px; color: var(--text-muted); font-weight: 500; }
-        .btn-icon-square { background: #1E293B; color: var(--text-main); border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .main-content { max-width: 1100px; margin: 20px auto 0; padding: 0 16px; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px; }
-        .summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
-        .summary-card.highlight { border-color: var(--border-accent); background: linear-gradient(135deg, rgba(236, 72, 153, 0.05), rgba(139, 92, 246, 0.05)); }
-        .summary-label { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px; }
-        .summary-val { font-size: 24px; font-weight: 800; word-break: break-word; }
-        .summary-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
-        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
-        .section-title { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 28px; }
-        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 18px; transition: transform 0.15s ease, border-color 0.15s ease; }
-        .card-interactive { cursor: pointer; }
-        .card-interactive.active { border-color: #FFFFFF !important; transform: translateY(-2px); }
-        .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-        .card-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; background: rgba(0, 0, 0, 0.25); flex-shrink: 0; }
-        .btn-primary { background: var(--pink-primary); color: white; border: none; padding: 11px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; }
-        .btn-secondary { background: #1E293B; color: var(--text-main); border: 1px solid var(--border); padding: 11px 18px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; }
-        .btn-action { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-main); padding: 9px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; min-width: 38px; min-height: 38px; justify-content: center; }
-        .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 8px; border-radius: 8px; transition: color 0.15s; min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
-        .btn-icon:hover { color: white; background: rgba(255,255,255,0.1); }
-        .form-box { background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: 18px; padding: 20px; margin-bottom: 24px; }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
-        .field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
-        input, select { width: 100%; background: #0B0F17; border: 1px solid var(--border); color: white; padding: 11px 12px; border-radius: 10px; font-size: 16px; font-weight: 600; outline: none; }
-        .progress-bar-bg { background: rgba(0, 0, 0, 0.3); height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; }
-        .progress-bar-fill { height: 100%; transition: width 0.3s ease; }
-        .search-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-        .search-input-wrapper { flex: 1; min-width: 200px; position: relative; }
-        .search-input-wrapper input { padding-left: 36px; }
-        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
-        .tx-list { display: flex; flex-direction: column; gap: 10px; }
-        .tx-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .tx-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .tx-badge { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
-        .tx-title { font-weight: 700; font-size: 14px; word-break: break-word; }
-        .tx-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-        .tx-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-        .tx-amount { font-weight: 800; font-size: 15px; white-space: nowrap; }
-        .tx-amount.income { color: var(--green); }
-        .tx-amount.expense { color: var(--red); }
-        .icon-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-        .icon-pick button { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: #0B0F17; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .icon-pick button.active { border-color: var(--pink-primary); color: white; background: var(--pink-primary); }
 
-        .color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); gap: 8px; margin-top: 8px; max-width: 460px; }
-        .color-swatch { width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: pointer; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15); transition: transform 0.1s ease; }
-        .color-swatch:hover { transform: scale(1.12); }
-        .color-swatch.active { border-color: white; transform: scale(1.18); box-shadow: 0 0 0 2px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.3); }
-
-        .view-toggle { display: flex; gap: 4px; background: #0B0F17; border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
-        .view-toggle button { background: transparent; border: none; color: var(--text-muted); padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 36px; }
-        .view-toggle button.active { background: var(--pink-primary); color: white; }
-
-        .stack-toolbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
-        .stack-edit-btn { background: #1E293B; color: var(--text-muted); border: 1px solid var(--border); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 42px; }
-        .stack-edit-btn.on { background: rgba(236, 72, 153, 0.15); border-color: var(--border-accent); color: var(--pink-primary); }
-
-        .stack-wrap { display: flex; flex-direction: column; padding-bottom: 8px; }
-        .stack-card { border-radius: 22px; padding: 16px 18px 30px; margin-top: -22px; cursor: pointer; transition: transform 0.15s ease, margin-top 0.2s ease; box-shadow: 0 -10px 24px rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.12); }
-        .stack-card:first-child { margin-top: 0; }
-        .stack-card:hover { transform: translateY(-3px); }
-        .stack-wrap.editing .stack-card { margin-top: 10px; cursor: default; box-shadow: none; }
-        .stack-wrap.editing .stack-card:first-child { margin-top: 0; }
-        .stack-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .stack-card-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .stack-card-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; word-break: break-word; }
-        .stack-card-hint { font-size: 11px; font-weight: 700; opacity: 0.75; margin-top: 2px; }
-        .stack-card-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-        .stack-saldo-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; opacity: 0.8; margin-top: 16px; }
-        .stack-saldo-val { font-size: 20px; font-weight: 800; margin-top: 2px; }
-        .toast { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); right: 16px; left: 16px; max-width: 360px; margin-left: auto; padding: 12px 18px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: white; z-index: 1000; animation: slideIn 0.2s ease; }
-        .toast-success { background: #10B981; }
-        .toast-error { background: #EF4444; }
-
-        .color-badge { padding: 2px 8px; border-radius: 6px; font-weight: 700; display: inline-block; }
-        .color-badge.income-contrast { background: rgba(16, 185, 129, 0.2); color: #34D399; }
-        .color-badge.expense-contrast { background: rgba(239, 68, 68, 0.2); color: #FCA5A5; }
-        .color-badge.light-bg-income { background: rgba(6, 95, 70, 0.15); color: #065F46; }
-        .color-badge.light-bg-expense { background: rgba(153, 27, 27, 0.15); color: #991B1B; }
-
-        .recurrent-tag { font-size: 10px; background: rgba(139, 92, 246, 0.2); color: var(--purple-accent); padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px; }
-        .adjust-tag { font-size: 10px; background: rgba(245, 158, 11, 0.2); color: var(--yellow); padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px; }
-
-        .drag-handle { cursor: grab; display: flex; align-items: center; opacity: 0.6; padding: 4px; }
-        .drag-handle:active { cursor: grabbing; }
-        .card-interactive.drag-over { outline: 2px dashed rgba(255,255,255,0.6); outline-offset: 3px; }
-
-        .filter-chip { display: inline-flex; align-items: center; gap: 8px; background: rgba(236, 72, 153, 0.15); border: 1px solid var(--border-accent); color: var(--text-main); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-bottom: 14px; }
-        .filter-chip button { background: none; border: none; color: var(--text-main); cursor: pointer; display: flex; align-items: center; }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(4, 6, 10, 0.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
-        .modal-content { width: 100%; max-width: 480px; max-height: 86vh; background: var(--bg-card); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
-        .modal-header { padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .modal-body { padding: 20px; overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
-        .modal-balance { font-size: 32px; font-weight: 800; margin: 4px 0 12px; }
-        .modal-tx-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
-        .modal-tx-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-
-        @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        /* ===== Optimización Móvil ===== */
-        @media (max-width: 640px) {
-          .btn-label { display: none; }
-          .header { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
-          .brand-title { font-size: 16px; }
-          .brand-sub { font-size: 11px; }
-          .brand-logo { width: 36px; height: 36px; font-size: 18px; }
-          .main-content { margin-top: 14px; padding: 0 12px; }
-          .summary-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 18px; }
-          .summary-card { padding: 16px; }
-          .summary-val { font-size: 22px; }
-          .section-header { flex-direction: column; align-items: stretch; }
-          .section-header > div:first-child { margin-bottom: 2px; }
-          .section-header .btn-primary,
-          .section-header .btn-secondary,
-          .section-header .stack-edit-btn { flex: 1; }
-          .section-header > div[style*="display: flex"] { width: 100%; }
-          .grid-3 { grid-template-columns: 1fr; gap: 12px; margin-bottom: 22px; }
-          .card, .form-box { padding: 16px; border-radius: 16px; }
-          .stack-card { padding: 14px 16px 26px; border-radius: 18px; }
-          .stack-card-name { font-size: 15px; }
-          .form-grid { grid-template-columns: 1fr; }
-          .modal-overlay { align-items: flex-end; padding: 0; }
-          .modal-content { max-width: 100%; max-height: 92vh; border-radius: 20px 20px 0 0; animation: slideIn 0.25s ease; }
-          .tx-item { padding: 12px 14px; flex-wrap: wrap; }
-          .toast { left: 12px; right: 12px; max-width: none; }
-          .color-grid { grid-template-columns: repeat(8, 1fr); max-width: 100%; }
-        }
-      `}</style>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && <Toast key={toast.message + toast.type} message={toast.message} type={toast.type} onClose={closeToast} />}
 
       <header className="header">
         <div className="header-inner">
