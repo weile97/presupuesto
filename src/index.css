@@ -43,7 +43,23 @@ input, select { font-family: inherit; }
 .btn-action { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-main); padding: 9px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; min-width: 38px; min-height: 38px; justify-content: center; }
 .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 8px; border-radius: 8px; transition: color 0.15s; min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
 @media (hover: hover) { .btn-icon:hover { color: white; background: rgba(255,255,255,0.1); } }
-.form-box { background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: 18px; padding: 20px; margin-bottom: 24px; }
+/* Los formularios se muestran como hoja/modal fija, no en mitad de la página */
+.form-box { position: fixed; z-index: 600; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 32px)); max-height: 88vh; max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain; background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: 20px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 590; background: rgba(4, 6, 10, 0.72); backdrop-filter: blur(3px); animation: fadeIn 0.15s ease; }
+.form-actions { display: flex; gap: 8px; margin-top: 16px; }
+.summary-row { display: contents; }
+.cycle-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: linear-gradient(135deg, rgba(236,72,153,0.18), rgba(139,92,246,0.18)); border: 1px solid var(--border-accent); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; }
+.fab { position: fixed; right: 18px; bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 400; width: 60px; height: 60px; border-radius: 50%; border: none; color: white; background: linear-gradient(135deg, var(--pink-primary), var(--purple-accent)); box-shadow: 0 10px 28px rgba(236,72,153,0.45); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.fab:active { transform: scale(0.94); }
+.quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.quick-actions button { min-height: 48px; font-size: 14px; }
+.status-pill { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: rgba(245,158,11,0.15); color: var(--yellow); white-space: nowrap; }
+.status-pill.done { background: rgba(16,185,129,0.15); color: var(--green); }
+.user-chip { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, var(--pink-primary), var(--purple-accent)); color: white; font-weight: 800; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+.bell-pulse { border-color: var(--border-accent); color: var(--pink-primary); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(236,72,153,0.4); } 50% { box-shadow: 0 0 0 6px rgba(236,72,153,0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
 input, select { width: 100%; background: #0B0F17; border: 1px solid var(--border); color: white; padding: 11px 12px; border-radius: 10px; font-size: 16px; font-weight: 600; outline: none; }
@@ -141,7 +157,17 @@ input, select { width: 100%; background: #0B0F17; border: 1px solid var(--border
   .section-header .stack-edit-btn { flex: 1; }
   .section-header > div[style*="display: flex"] { width: 100%; }
   .grid-3 { grid-template-columns: 1fr; gap: 12px; margin-bottom: 22px; }
-  .card, .form-box { padding: 16px; border-radius: 16px; }
+  .card { padding: 16px; border-radius: 16px; }
+  /* En el móvil: hoja que sube desde abajo, con hueco para la barra del sistema */
+  .form-box { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); animation: sheetUp 0.22s ease; }
+  .form-box::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); margin: -8px auto 14px; }
+  .form-actions > button { flex: 1; min-height: 48px; font-size: 15px; }
+  .summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .summary-row .summary-val { font-size: 18px; }
+  .summary-card.highlight .summary-val { font-size: 30px; }
+  .tx-right .btn-icon { min-width: 40px; min-height: 40px; }
+  .cycle-banner .btn-primary { width: 100%; }
+  .app-container { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
   .stack-card { padding: 14px 16px 26px; border-radius: 18px; }
   .stack-card-name { font-size: 15px; }
   .form-grid { grid-template-columns: 1fr; }

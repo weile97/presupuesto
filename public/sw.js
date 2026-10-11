@@ -6,6 +6,8 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+let unread = 0;
+
 self.addEventListener('push', (event) => {
   let data = { title: 'M&J 🦄', body: 'Hay novedades en vuestro presupuesto.' };
   try {
@@ -16,20 +18,33 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      // Avisamos a las pestañas abiertas para que recarguen los datos al instante
       const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      // Avisamos a las pestañas abiertas para que recarguen los datos al instante
       clientList.forEach((c) => c.postMessage({ type: 'mj-data-changed' }));
 
+      // Contador en el icono de la app (como WhatsApp), donde el sistema lo permita
+      unread += 1;
+      try { await self.navigator.setAppBadge?.(unread); } catch { /* no soportado */ }
+
+      // Tag único: cada aviso se apila en vez de sustituir al anterior
       await self.registration.showNotification(data.title || 'M&J 🦄', {
         body: data.body || '',
-        icon: '/favicon.svg',
-        tag: 'mj-push',
-        renotify: true,
-        vibrate: [80, 40, 80],
+        icon: '/icon-192.png',
+        badge: '/badge-96.png',
+        tag: `mj-${data.ts || Date.now()}`,
+        vibrate: [120, 60, 120],
+        timestamp: data.ts || Date.now(),
         data: { url: '/' }
       });
     })()
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'mj-clear-badge') {
+    unread = 0;
+    try { self.navigator.clearAppBadge?.(); } catch { /* no soportado */ }
+  }
 });
 
 self.addEventListener('notificationclick', (event) => {

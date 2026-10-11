@@ -8,6 +8,7 @@ import {
   Dumbbell, Baby, Shirt, Smartphone, LayoutGrid, Layers, Settings2,
   History, BellRing
 } from "lucide-react";
+import { todayLocal, currentCycle, computeFund, isAllocation, isExpenseType, runAutomations, describeChanges } from "./shared.js";
 
 const API_URL = "/api/data";
 const EMPTY = Object.freeze([]);
@@ -37,8 +38,18 @@ const PRESET_COLORS = [
 ];
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const currentMonthYear = () => new Date().toISOString().slice(0, 7);
+// Fechas en hora de España (toISOString usa UTC y entre las 00:00 y las 02:00 daba el día anterior)
+const todayISO = () => todayLocal();
+
+const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+
+// Importes: acepta "12,50" o "12.50" (el teclado español usa coma)
+const parseAmount = (v) => parseFloat(String(v ?? "").trim().replace(/\s/g, "").replace(",", "."));
+
+const USER_NAME_KEY = "mj_user_name";
+const readUserName = () => { try { return localStorage.getItem(USER_NAME_KEY) || ""; } catch { return ""; } };
+
+const TX_PAGE = 40;
 
 const DEVICE_ID = (() => {
   try {
@@ -126,16 +137,10 @@ function mergeData(base, local, remote) {
   for (const k of ["sources", "categories", "transactions", "recurrents"]) {
     merged[k] = mergeById(base[k], local[k], remote[k]);
   }
-  if (local.lastActiveMonth === base.lastActiveMonth) merged.lastActiveMonth = remote.lastActiveMonth;
+  for (const k of ["lastActiveMonth", "payrollCycle"]) {
+    if (local[k] === base[k]) merged[k] = remote[k];
+  }
   return merged;
-}
-
-function describeChange(prev, next) {
-  const len = (d, k) => (d?.[k] || []).length;
-  if (len(next, "transactions") > len(prev, "transactions")) return "Se ha añadido un nuevo movimiento 💸";
-  if (len(next, "transactions") < len(prev, "transactions")) return "Se ha eliminado un movimiento 🗑️";
-  if (len(next, "categories") !== len(prev, "categories")) return "Se ha actualizado un sobre 💌";
-  return "Vuestro presupuesto M&J se ha actualizado ✨";
 }
 
 const splitRemote = (remote) => {
@@ -281,7 +286,41 @@ export default function App() {
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
   );
 
+  // Nombre de quien usa este móvil (aparece en las notificaciones: "M&J · Meli")
+  const [userName, setUserName] = useState(readUserName);
+  const [showNameSheet, setShowNameSheet] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const userNameRef = useRef(userName);
+  useEffect(() => { userNameRef.current = userName; }, [userName]);
+
+  function saveUserName() {
+    const n = nameDraft.trim().slice(0, 24);
+    if (!n) return showNotification("Escribe tu nombre.", "error");
+    try { localStorage.setItem(USER_NAME_KEY, n); } catch { /* sin almacenamiento */ }
+    setUserName(n);
+    setShowNameSheet(false);
+    showNotification(`¡Hola, ${n}! 👋`);
+  }
+
+  const [txPaging, setTxPaging] = useState({ key: "", n: TX_PAGE });
+
+  // Solo un formulario abierto a la vez (se muestran como hoja inferior en el móvil)
+  function closeForms() {
+    setShowAddSourceModal(false); setEditingSourceId(null);
+    setDepositSourceModal(null);
+    setShowBulkPayroll(false);
+    setShowTransferModal(false);
+    setShowAddCategory(false); setEditingCategoryId(null);
+    setShowRecurrentModal(false);
+    setShowAddTx(false); setEditingTxId(null);
+    setShowNameSheet(false);
+  }
+
   function enableNotifications() {
+    if (!userNameRef.current) {
+      setNameDraft("");
+      setShowNameSheet(true);
+    }
     if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
       // En iPhone solo funcionan si la app está añadida a la pantalla de inicio
       return showNotification("Para recibir avisos en iPhone: Compartir → Añadir a pantalla de inicio y abre la app desde ahí.", "error");
@@ -293,7 +332,7 @@ export default function App() {
         showNotification(ok ? "Notificaciones activadas 🔔" : "Permiso concedido, pero no se pudo completar la suscripción push.", ok ? "success" : "error");
         // En Android "new Notification()" lanza error: hay que usar el Service Worker
         navigator.serviceWorker.ready
-          .then((reg) => reg.showNotification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de los cambios.", tag: "mj-welcome", icon: "/favicon.svg" }))
+          .then((reg) => reg.showNotification("M&J 🦄", { body: "¡Notificaciones activadas! Os avisaremos de cada cambio.", tag: "mj-welcome", icon: "/icon-192.png", badge: "/badge-96.png" }))
           .catch(() => {});
       } else {
         showNotification("No se han activado las notificaciones.", "error");
@@ -384,7 +423,8 @@ export default function App() {
       const prev = dataRef.current;
       const next = applyRemote(remote);
       if (notify && prev && next.lastEditedBy !== DEVICE_ID) {
-        setToast({ message: describeChange(prev, next), type: "success" });
+        const { title, body } = describeChanges(prev, next);
+        setToast({ message: `${title.replace("M&J 🦄 · ", "")}: ${body.split("\n")[0]}`, type: "success" });
       }
     } catch {
       // sin conexión: se intentará en el siguiente ciclo
@@ -422,19 +462,43 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [unlockedCats]);
 
-  const updateDataAndSave = (newData) => {
-    const stamped = { ...newData, lastEditedBy: DEVICE_ID, lastEditedAt: Date.now() };
+  const updateDataAndSave = useCallback((newData) => {
+    const stamped = {
+      ...newData,
+      lastEditedBy: DEVICE_ID,
+      lastEditedName: userNameRef.current || null,
+      lastEditedAt: Date.now()
+    };
     dataRef.current = stamped;
     pendingRef.current = true;
     setData(stamped);
     flushSave();
-  };
+  }, [flushSave]);
+
+  // Cambio de ciclo del día 29 y recurrentes: si toca, se hace solo al abrir la app
+  // (el cron de Vercel lo hace también aunque nadie la abra).
+  const runPendingAutomations = useCallback(() => {
+    if (pendingRef.current || busyRef.current || !dataRef.current) return;
+    const result = runAutomations(dataRef.current);
+    if (!result) return;
+    updateDataAndSave(result.data);
+    if (result.messages.length) setToast({ message: result.messages.join(" "), type: "success" });
+  }, [updateDataAndSave]);
 
   // Sondeo: solo con la app visible (ahorra batería); al volver a primer plano, al recuperar
   // conexión o al llegar un push, se refresca al instante.
   useEffect(() => {
     if (loading) return;
-    const tick = () => { if (document.visibilityState === "visible") refreshFromServer(); };
+    const clearBadge = () => {
+      try { navigator.clearAppBadge?.(); } catch { /* no soportado */ }
+      navigator.serviceWorker?.controller?.postMessage({ type: "mj-clear-badge" });
+    };
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      clearBadge();
+      refreshFromServer().then(runPendingAutomations);
+    };
+    tick();
     const interval = setInterval(tick, 15000);
     const onSwMessage = (e) => { if (e.data?.type === "mj-data-changed") refreshFromServer(); };
     const onBeforeUnload = (e) => { if (pendingRef.current || busyRef.current) e.preventDefault(); };
@@ -450,30 +514,29 @@ export default function App() {
       window.removeEventListener("beforeunload", onBeforeUnload);
       navigator.serviceWorker?.removeEventListener("message", onSwMessage);
     };
-  }, [loading, refreshFromServer]);
+  }, [loading, refreshFromServer, runPendingAutomations]);
+
+  // Bloquea el scroll de la página mientras hay una hoja/modal abierta
+  const anySheetOpen = !!(showAddSourceModal || depositSourceModal || showBulkPayroll || showTransferModal ||
+    showAddCategory || showRecurrentModal || showAddTx || showNameSheet);
+  useEffect(() => {
+    const locked = anySheetOpen || !!viewingCategoryId;
+    document.body.style.overflow = locked ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [anySheetOpen, viewingCategoryId]);
 
   const sources = data?.sources || EMPTY;
   const categories = data?.categories || EMPTY;
   const transactions = data?.transactions || EMPTY;
   const recurrents = data?.recurrents || EMPTY;
-  const lastActiveMonth = data?.lastActiveMonth || currentMonthYear();
+  const cycle = currentCycle();
 
-  // Balances
-  const totalBaseIncome = useMemo(() => {
-    return transactions
-      .filter((t) => t.type === "payroll_income")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions]);
-
-  const totalAssignedToCategories = useMemo(() => {
-    return transactions
-      .filter((t) => t.categoryId && t.type === "income")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions]);
-
-  const globalUnallocated = useMemo(() => {
-    return totalBaseIncome - totalAssignedToCategories;
-  }, [totalBaseIncome, totalAssignedToCategories]);
+  // Balances del ciclo actual (desde el día 29)
+  const fund = useMemo(() => computeFund(transactions), [transactions]);
+  const totalBaseIncome = fund.income;
+  const totalAssignedToCategories = fund.assigned;
+  const globalUnallocated = fund.available;
+  const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
   const categoryBalances = useMemo(() => {
     const map = {};
@@ -495,6 +558,7 @@ export default function App() {
 
   // Funciones de Nómina / Fuentes de Ingreso
   function openSalaryModal(src) {
+    closeForms();
     setDepositSourceModal(src);
     setCustomSalaryAmount(src.amount ? src.amount.toString() : "");
   }
@@ -502,7 +566,7 @@ export default function App() {
   function confirmSalaryDeposit() {
     if (!depositSourceModal) return;
 
-    const amt = parseFloat(customSalaryAmount.replace(",", "."));
+    const amt = parseAmount(customSalaryAmount);
     if (isNaN(amt) || amt <= 0) {
       return showNotification("Ingresa un importe de nómina válido.", "error");
     }
@@ -528,6 +592,7 @@ export default function App() {
   }
 
   function openBulkPayrollModal() {
+    closeForms();
     if (sources.length === 0) {
       return showNotification("No hay fuentes de nómina configuradas.", "error");
     }
@@ -547,8 +612,7 @@ export default function App() {
   function confirmBulkPayroll() {
     const newTransactions = [];
     for (const src of sources) {
-      const raw = (bulkAmounts[src.id] || "").toString().replace(",", ".");
-      const amt = parseFloat(raw);
+      const amt = parseAmount(bulkAmounts[src.id]);
       if (!isNaN(amt) && amt > 0) {
         newTransactions.push({
           id: uid(),
@@ -579,6 +643,7 @@ export default function App() {
   }
 
   function openAddSourceModal() {
+    closeForms();
     setEditingSourceId(null);
     setSourceName("");
     setSourceAmount("");
@@ -588,6 +653,7 @@ export default function App() {
   }
 
   function openEditSourceModal(src, e) {
+    closeForms();
     e.stopPropagation();
     setEditingSourceId(src.id);
     setSourceName(src.name);
@@ -599,7 +665,7 @@ export default function App() {
 
   function saveSource() {
     const name = sourceName.trim();
-    const amt = parseFloat(sourceAmount.replace(",", "."));
+    const amt = parseAmount(sourceAmount);
     if (!name || isNaN(amt) || amt < 0) {
       return showNotification("Ingresa un nombre e importe de referencia válidos.", "error");
     }
@@ -641,6 +707,7 @@ export default function App() {
 
   // Funciones de Categorías
   function openAddCategoryModal() {
+    closeForms();
     setEditingCategoryId(null);
     setNewCatName(""); setNewCatIcon("wallet"); setNewCatColor(PRESET_COLORS[0]);
     setNewCatHasPin(false); setNewCatPin(""); setNewCatGoal("");
@@ -656,6 +723,7 @@ export default function App() {
         return showNotification("Contraseña incorrecta.", "error");
       }
     }
+    closeForms();
     setEditingCategoryId(cat.id);
     setNewCatName(cat.name);
     setNewCatIcon(cat.icon || "wallet");
@@ -672,7 +740,7 @@ export default function App() {
     if (!name) return showNotification("Ingresa un nombre para la categoría.", "error");
     if (newCatHasPin && !newCatPin.trim()) return showNotification("Asigna un PIN a la categoría.", "error");
 
-    const goalParsed = parseFloat(newCatGoal.replace(",", "."));
+    const goalParsed = parseAmount(newCatGoal);
 
     if (editingCategoryId) {
       const updatedCats = categories.map((c) =>
@@ -714,7 +782,7 @@ export default function App() {
   function applyCategoryAdjustment(catId) {
     const cat = categories.find((c) => c.id === catId);
     if (!cat) return;
-    const amt = parseFloat(catAdjustAmount.replace(",", "."));
+    const amt = parseAmount(catAdjustAmount);
     if (isNaN(amt) || amt === 0) {
       return showNotification("Ingresa una cantidad válida para el ajuste (positiva o negativa).", "error");
     }
@@ -803,11 +871,14 @@ export default function App() {
   }
 
   // Funciones de Transacciones
-  function openAddTxModal() {
+  // preset: { type, categoryId } para abrir el formulario ya rellenado (botón +, accesos de un sobre)
+  function openAddTxModal(preset = {}) {
+    closeForms();
+    setViewingCategoryId(null);
     setEditingTxId(null);
     setTxConcept("");
-    setTxCategory("");
-    setTxType("income");
+    setTxCategory(preset.categoryId || "");
+    setTxType(preset.type || "expense");
     setTxAmount("");
     setTxDate(todayISO());
     setShowAddTx(true);
@@ -823,6 +894,7 @@ export default function App() {
       }
     }
 
+    closeForms();
     setEditingTxId(t.id);
     setTxConcept(t.concept);
     setTxCategory(t.categoryId || "");
@@ -855,7 +927,7 @@ export default function App() {
   }
 
   function saveTransaction() {
-    const amt = parseFloat(txAmount.replace(",", "."));
+    const amt = parseAmount(txAmount);
 
     if (!txConcept.trim() || isNaN(amt) || amt <= 0 || !txCategory) {
       return showNotification("Completa todos los campos correctamente.", "error");
@@ -871,9 +943,9 @@ export default function App() {
     }
 
     if (txType === "income") {
-      const previousAmount = editingTxId
-        ? transactions.find((t) => t.id === editingTxId)?.amount || 0
-        : 0;
+      // Lo asignado en ciclos anteriores (settled) ya no cuenta en el Fondo General de este ciclo
+      const editing = editingTxId ? transactions.find((t) => t.id === editingTxId) : null;
+      const previousAmount = editing && isAllocation(editing) && !editing.settled ? editing.amount || 0 : 0;
       if (globalUnallocated + previousAmount < amt) {
         return showNotification("Saldo insuficiente en el Fondo General para asignar.", "error");
       }
@@ -917,7 +989,7 @@ export default function App() {
 
   // Recurrentes
   function addRecurrentRule() {
-    const amt = parseFloat(recAmount.replace(",", "."));
+    const amt = parseAmount(recAmount);
     const day = parseInt(recDay, 10);
 
     if (!recConcept.trim() || isNaN(amt) || amt <= 0 || !recCategory || isNaN(day) || day < 1 || day > 31) {
@@ -930,7 +1002,14 @@ export default function App() {
       categoryId: recCategory,
       type: recType,
       amount: amt,
-      day
+      day,
+      // Si el día de este mes ya pasó, empieza a aplicarse el mes que viene
+      startMonth: (() => {
+        const t = todayISO();
+        const [y, m, d] = t.split("-").map(Number);
+        if (day >= d) return t.slice(0, 7);
+        return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+      })()
     };
 
     updateDataAndSave({
@@ -942,7 +1021,7 @@ export default function App() {
     setRecAmount("");
     setRecCategory("");
     setShowRecurrentModal(false);
-    showNotification("Regla recurrente programada.");
+    showNotification(`Regla programada: se aplicará sola el día ${day} de cada mes.`);
   }
 
   function deleteRecurrentRule(id) {
@@ -959,21 +1038,22 @@ export default function App() {
       return showNotification("No hay automatizaciones recurrentes configuradas.", "error");
     }
 
-    const currentYearMonth = currentMonthYear();
+    const currentYearMonth = todayISO().slice(0, 7);
     let appliedCount = 0;
     const newTransactions = [...transactions];
 
     for (const rec of recurrents) {
       const dateStr = `${currentYearMonth}-${String(rec.day).padStart(2, "0")}`;
       const alreadyApplied = transactions.some(
-        (t) => t.recurrentId === rec.id && t.date.startsWith(currentYearMonth)
+        (t) => t.recurrentId === rec.id && (t.date || "").startsWith(currentYearMonth)
       );
 
       if (!alreadyApplied) {
         newTransactions.unshift({
-          id: uid(),
+          // Mismo id que usa la automatización: nunca se aplica dos veces el mismo mes
+          id: `rec-${rec.id}-${currentYearMonth}`,
           recurrentId: rec.id,
-          concept: `[Recorrente] ${rec.concept}`,
+          concept: rec.concept,
           categoryId: rec.categoryId,
           sourceId: null,
           type: rec.type,
@@ -994,7 +1074,7 @@ export default function App() {
 
   // Traspasos entre categorías
   function handleTransferBetweenCategories() {
-    const amt = parseFloat(transferAmount.replace(",", "."));
+    const amt = parseAmount(transferAmount);
     if (!fromCategory || !toCategory || isNaN(amt) || amt <= 0) {
       return showNotification("Completa los datos de traspaso.", "error");
     }
@@ -1057,36 +1137,45 @@ export default function App() {
 
     if (publicTxs.length === 0) return showNotification("No hay movimientos públicos para exportar.", "error");
 
-    let csvContent = "data:text/csv;charset=utf-8,ID,Fecha,Concepto,Tipo,Importe,Categoria\n";
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // ";" y BOM para que Excel en español lo abra bien; Blob en vez de data: URI (fallaba con "#" y en móviles)
+    let csv = "﻿Fecha;Concepto;Tipo;Importe;Sobre\n";
     publicTxs.forEach((t) => {
-      const cat = categories.find((c) => c.id === t.categoryId);
-      csvContent += `${t.id},${t.date},"${t.concept}",${t.type},${t.amount},"${cat ? cat.name : "Fondo General"}"\n`;
+      const cat = catById.get(t.categoryId);
+      csv += [t.date, esc(t.concept), t.type, String(t.amount).replace(".", ","), esc(cat ? cat.name : "Fondo General")].join(";") + "\n";
     });
 
-    const encodedUri = encodeURI(csvContent);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `finanzas_historial_${todayISO()}.csv`);
+    link.href = url;
+    link.download = `presupuesto_${todayISO()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   const filteredTx = useMemo(() => {
-    return transactions.filter((t) => {
-      const cat = categories.find((c) => c.id === t.categoryId);
-      if (cat && cat.hasPin && !unlockedCats[cat.id]) return false;
+    const q = searchQuery.trim().toLowerCase();
+    const from = currentCycle().start;
+    return transactions
+      .filter((t) => {
+        const cat = catById.get(t.categoryId);
+        if (cat && cat.hasPin && !unlockedCats[cat.id]) return false;
+        if (selectedCatFilter && t.categoryId !== selectedCatFilter) return false;
+        if (q && !(t.concept || "").toLowerCase().includes(q)) return false;
+        if (dateRangeFilter === "current" && (t.date || "") < from) return false;
+        if (dateRangeFilter === "expenses" && !isExpenseType(t.type)) return false;
+        return true;
+      })
+      // Más recientes primero
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }, [transactions, catById, unlockedCats, selectedCatFilter, searchQuery, dateRangeFilter]);
 
-      const matchesCat = selectedCatFilter ? t.categoryId === selectedCatFilter : true;
-      const matchesSearch = searchQuery === "" || t.concept.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      let matchesDate = true;
-      const curM = currentMonthYear();
-      if (dateRangeFilter === "current") matchesDate = t.date.startsWith(curM);
-
-      return matchesCat && matchesSearch && matchesDate;
-    });
-  }, [transactions, categories, unlockedCats, selectedCatFilter, searchQuery, dateRangeFilter]);
+  // Paginación: al cambiar los filtros se vuelve a la primera página
+  const filterKey = `${selectedCatFilter}|${searchQuery}|${dateRangeFilter}`;
+  const txLimit = txPaging.key === filterKey ? txPaging.n : TX_PAGE;
+  const showMoreTx = () => setTxPaging({ key: filterKey, n: txLimit + TX_PAGE });
 
   if (loading) return <div className="loading-screen">Cargando datos...</div>;
 
@@ -1117,22 +1206,40 @@ export default function App() {
             <div className="brand-logo">🦄</div>
             <div>
               <div className="brand-title">M&amp;J</div>
-              <div className="brand-sub">Periodo: {lastActiveMonth}</div>
+              <div className="brand-sub">Ciclo: {fmtDay(cycle.start)} – {fmtDay(cycle.nextStart)}</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {notifPermission !== "granted" && notifPermission !== "unsupported" && (
-              <button className="btn-icon-square" onClick={enableNotifications} title="Activar notificaciones">
+            {notifPermission !== "granted" && (
+              <button className="btn-icon-square bell-pulse" onClick={enableNotifications} title="Activar notificaciones">
                 <BellRing size={17} />
                 <span className="btn-label"> Activar avisos</span>
               </button>
             )}
-            <button className="btn-secondary" onClick={exportCSV}><Download size={15} /> <span className="btn-label">Exportar CSV</span></button>
+            <button
+              className="btn-icon-square"
+              onClick={() => { closeForms(); setNameDraft(userName); setShowNameSheet(true); }}
+              title="¿Quién usa este móvil?"
+            >
+              {userName ? <span className="user-chip">{userName.slice(0, 1).toUpperCase()}</span> : <Heart size={17} />}
+            </button>
+            <button className="btn-icon-square" onClick={exportCSV} title="Exportar CSV"><Download size={17} /><span className="btn-label"> CSV</span></button>
           </div>
         </div>
       </header>
 
       <main className="main-content">
+        {/* Aviso de ciclo nuevo sin nóminas registradas */}
+        {sources.length > 0 && totalBaseIncome === 0 && (
+          <div className="cycle-banner">
+            <div>
+              <div style={{ fontWeight: 800 }}>🗓️ Nuevo ciclo desde el {fmtDay(cycle.start)}</div>
+              <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>Aún no hay nóminas registradas en este ciclo.</div>
+            </div>
+            <button className="btn-primary" onClick={openBulkPayrollModal}><Plus size={15} /> Registrar nóminas</button>
+          </div>
+        )}
+
         {/* Resumen Métricas */}
         <div className="summary-grid">
           <div className="summary-card highlight">
@@ -1140,17 +1247,19 @@ export default function App() {
             <div className="summary-val" style={{ color: globalUnallocated >= 0 ? "var(--text-main)" : "var(--red)" }}>
               {money(globalUnallocated)}
             </div>
-            <div className="summary-sub">Nóminas sin asignar a categorías</div>
+            <div className="summary-sub">
+              Sin asignar a sobres{fund.carry !== 0 ? ` · incluye ${money(fund.carry)} del ciclo anterior` : ""}
+            </div>
           </div>
-          <div className="summary-card">
-            <div className="summary-label">Nóminas Ingresadas</div>
-            <div className="summary-val" style={{ color: "var(--green)" }}>{money(totalBaseIncome)}</div>
-            <div className="summary-sub">Ingresos brutos percibidos</div>
-          </div>
-          <div className="summary-card">
-            <div className="summary-label">Asignado a Categorías</div>
-            <div className="summary-val" style={{ color: "var(--purple-accent)" }}>{money(totalAssignedToCategories)}</div>
-            <div className="summary-sub">Presupuesto repartido</div>
+          <div className="summary-row">
+            <div className="summary-card">
+              <div className="summary-label">Nóminas del ciclo</div>
+              <div className="summary-val" style={{ color: "var(--green)" }}>{money(totalBaseIncome)}</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Asignado a sobres</div>
+              <div className="summary-val" style={{ color: "var(--purple-accent)" }}>{money(totalAssignedToCategories)}</div>
+            </div>
           </div>
         </div>
 
@@ -1185,7 +1294,7 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>Importe de Ref. (€)</label>
-                  <input type="number" value={sourceAmount} onChange={(e) => setSourceAmount(e.target.value)} placeholder="Ej. 1800" />
+                  <input type="text" inputMode="decimal" value={sourceAmount} onChange={(e) => setSourceAmount(e.target.value)} placeholder="Ej. 1800" />
                 </div>
                 <div className="field" style={{ gridColumn: "1 / -1" }}>
                   <label>Color</label>
@@ -1196,7 +1305,7 @@ export default function App() {
                   <IconPicker icons={SRC_ICONS} order={Object.keys(SRC_ICONS)} value={sourceIcon} onChange={setSourceIcon} />
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={saveSource}><Check size={15} /> Guardar Fuente</button>
                 <button className="btn-secondary" onClick={() => setShowAddSourceModal(false)}>Cancelar</button>
               </div>
@@ -1215,7 +1324,7 @@ export default function App() {
                 <div className="field">
                   <label>Importe Cobrado (€)</label>
                   <input
-                    type="number"
+                    type="text" inputMode="decimal"
                     value={customSalaryAmount}
                     onChange={(e) => setCustomSalaryAmount(e.target.value)}
                     placeholder="Ej. 1850.50"
@@ -1223,7 +1332,7 @@ export default function App() {
                   />
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={confirmSalaryDeposit}><Check size={15} /> Añadir al Fondo General</button>
                 <button className="btn-secondary" onClick={() => setDepositSourceModal(null)}>Cancelar</button>
               </div>
@@ -1244,7 +1353,7 @@ export default function App() {
                       <div className="card-icon" style={{ background: s.color, flexShrink: 0 }}><Icon size={16} /></div>
                       <div style={{ flex: 1, minWidth: 120, fontWeight: 700, fontSize: 13 }}>{s.name}</div>
                       <input
-                        type="number"
+                        type="text" inputMode="decimal"
                         value={bulkAmounts[s.id] ?? ""}
                         onChange={(e) => setBulkAmounts((prev) => ({ ...prev, [s.id]: e.target.value }))}
                         placeholder="0.00"
@@ -1254,7 +1363,7 @@ export default function App() {
                   );
                 })}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={confirmBulkPayroll}><Check size={15} /> Confirmar Ingresos</button>
                 <button className="btn-secondary" onClick={() => setShowBulkPayroll(false)}>Cancelar</button>
               </div>
@@ -1318,7 +1427,7 @@ export default function App() {
                   <Settings2 size={14} /> {stackEditMode ? "Terminar Edición" : "Habilitar Edición"}
                 </button>
               )}
-              <button className="btn-secondary" onClick={() => setShowTransferModal(true)}><ArrowRightLeft size={15} /> Traspaso entre Sobres</button>
+              <button className="btn-secondary" onClick={() => { closeForms(); setShowTransferModal(true); }}><ArrowRightLeft size={15} /> Traspaso entre Sobres</button>
               <button className="btn-primary" onClick={openAddCategoryModal}><Plus size={15} /> {catViewMode === "stack" ? "Crear Sobre" : "Nueva Categoría"}</button>
             </div>
           </div>
@@ -1343,10 +1452,10 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>Importe (€)</label>
-                  <input type="number" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} />
+                  <input type="text" inputMode="decimal" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} />
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={handleTransferBetweenCategories}><Check size={15} /> Confirmar Traspaso</button>
                 <button className="btn-secondary" onClick={() => setShowTransferModal(false)}>Cancelar</button>
               </div>
@@ -1373,7 +1482,7 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>Meta / Presupuesto (€)</label>
-                  <input type="number" value={newCatGoal} onChange={(e) => setNewCatGoal(e.target.value)} placeholder="Ej. 1000" />
+                  <input type="text" inputMode="decimal" value={newCatGoal} onChange={(e) => setNewCatGoal(e.target.value)} placeholder="Ej. 1000" />
                 </div>
               </div>
 
@@ -1394,7 +1503,7 @@ export default function App() {
                   <label style={{ color: "var(--yellow)" }}>Ajustar saldo del sobre (no afecta al Fondo General)</label>
                   <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                     <input
-                      type="number"
+                      type="text" inputMode="decimal"
                       value={catAdjustAmount}
                       onChange={(e) => setCatAdjustAmount(e.target.value)}
                       placeholder="Ej. 50 o -20"
@@ -1414,7 +1523,7 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={saveCategory}><Check size={15} /> {editingCategoryId ? "Guardar Cambios" : "Guardar"}</button>
                 <button className="btn-secondary" onClick={() => { setShowAddCategory(false); setEditingCategoryId(null); }}>Cancelar</button>
               </div>
@@ -1489,7 +1598,7 @@ export default function App() {
                     {isLocked ? "••••••" : money(stats.balance)}
                   </div>
 
-                  <div style={{ display: "flex", justifyBetween: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 12, fontWeight: 700 }}>
                     <span className={`color-badge ${isBgLight ? "light-bg-income" : "income-contrast"}`}>
                       + {isLocked ? "•••" : money(stats.income)}
                     </span>
@@ -1590,7 +1699,7 @@ export default function App() {
             <div className="section-title"><Calendar size={18} color="var(--yellow)" /> Automatización Recurrente Mensual</div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-secondary" onClick={processMonthlyRecurrents}><RefreshCw size={15} /> Cargar Recurrentes de Este Mes</button>
-              <button className="btn-primary" onClick={() => setShowRecurrentModal(true)}><Plus size={15} /> Nueva Regla Recurrente</button>
+              <button className="btn-primary" onClick={() => { closeForms(); setShowRecurrentModal(true); }}><Plus size={15} /> Nueva Regla Recurrente</button>
             </div>
           </div>
 
@@ -1618,14 +1727,14 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>Importe (€)</label>
-                  <input type="number" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} placeholder="Ej. 450" />
+                  <input type="text" inputMode="decimal" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} placeholder="Ej. 450" />
                 </div>
                 <div className="field">
                   <label>Día de cobro mensual (1 - 31)</label>
-                  <input type="number" min="1" max="31" value={recDay} onChange={(e) => setRecDay(e.target.value)} />
+                  <input type="text" inputMode="numeric" value={recDay} onChange={(e) => setRecDay(e.target.value)} />
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={addRecurrentRule}><Check size={15} /> Guardar Regla</button>
                 <button className="btn-secondary" onClick={() => setShowRecurrentModal(false)}>Cancelar</button>
               </div>
@@ -1635,7 +1744,9 @@ export default function App() {
           {recurrents.length > 0 && (
             <div className="grid-3" style={{ marginBottom: 32 }}>
               {recurrents.map((r) => {
-                const cat = categories.find((c) => c.id === r.categoryId);
+                const cat = catById.get(r.categoryId);
+                const month = todayISO().slice(0, 7);
+                const appliedThisMonth = transactions.some((t) => t.recurrentId === r.id && (t.date || "").startsWith(month));
                 return (
                   <div className="card" key={r.id} style={{ padding: "16px" }}>
                     <div className="card-top" style={{ marginBottom: 8 }}>
@@ -1645,8 +1756,13 @@ export default function App() {
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
                       Día {r.day} de cada mes • Categoría: <strong style={{ color: "white" }}>{cat ? cat.name : "N/A"}</strong>
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: r.type === "expense" ? "var(--red)" : "var(--green)" }}>
-                      {r.type === "expense" ? "-" : "+"}{money(r.amount)}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: r.type === "expense" ? "var(--red)" : "var(--green)" }}>
+                        {r.type === "expense" ? "-" : "+"}{money(r.amount)}
+                      </div>
+                      <span className={`status-pill ${appliedThisMonth ? "done" : ""}`}>
+                        {appliedThisMonth ? "✓ Aplicado este mes" : r.startMonth && month < r.startMonth ? "Empieza el mes que viene" : `Automático el día ${r.day}`}
+                      </span>
                     </div>
                   </div>
                 );
@@ -1665,7 +1781,7 @@ export default function App() {
                   <Trash2 size={14} /> Vaciar Movimientos
                 </button>
               )}
-              <button className="btn-primary" onClick={openAddTxModal}><Plus size={15} /> Nuevo Registro</button>
+              <button className="btn-primary" onClick={() => openAddTxModal()}><Plus size={15} /> Nuevo Registro</button>
             </div>
           </div>
 
@@ -1687,8 +1803,9 @@ export default function App() {
               />
             </div>
             <select style={{ maxWidth: 180 }} value={dateRangeFilter} onChange={(e) => setDateRangeFilter(e.target.value)}>
-              <option value="all">Todas las fechas</option>
-              <option value="current">Este mes</option>
+              <option value="all">Todo</option>
+              <option value="current">Este ciclo</option>
+              <option value="expenses">Solo gastos</option>
             </select>
           </div>
 
@@ -1718,7 +1835,7 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>Monto (€)</label>
-                  <input type="number" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} />
+                  <input type="text" inputMode="decimal" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} placeholder="0,00" autoFocus={!editingTxId} />
                 </div>
                 <div className="field">
                   <label>Fecha</label>
@@ -1726,7 +1843,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <div className="form-actions">
                 <button className="btn-primary" onClick={saveTransaction}><Check size={15} /> Guardar</button>
                 <button className="btn-secondary" onClick={() => { setShowAddTx(false); setEditingTxId(null); }}>Cancelar</button>
               </div>
@@ -1739,11 +1856,11 @@ export default function App() {
                 No se encontraron registros.
               </div>
             ) : (
-              filteredTx.map((t) => {
-                const cat = categories.find((c) => c.id === t.categoryId);
-                const Icon = cat ? (CAT_ICONS[cat.icon] || Wallet) : Wallet;
-                const catBgColor = cat?.color || "#1E293B";
-                const isExpense = t.type === "expense" || t.type === "transfer_expense" || t.type === "adjustment_expense";
+              filteredTx.slice(0, txLimit).map((t) => {
+                const cat = catById.get(t.categoryId);
+                const Icon = cat ? (CAT_ICONS[cat.icon] || Wallet) : t.type === "payroll_income" ? Banknote : Wallet;
+                const catBgColor = cat?.color || (t.type === "payroll_income" ? "#059669" : "#1E293B");
+                const isExpense = isExpenseType(t.type) || (t.type === "carryover" && t.amount < 0);
                 const isAdjustment = t.type === "adjustment_income" || t.type === "adjustment_expense";
 
                 return (
@@ -1755,15 +1872,15 @@ export default function App() {
                       <div>
                         <div className="tx-title">
                           {t.concept}
-                          {t.recurrentId && <span className="recurrent-tag">Recorrente</span>}
+                          {t.recurrentId && <span className="recurrent-tag">Recurrente</span>}
                           {isAdjustment && <span className="adjust-tag">Ajuste</span>}
                         </div>
-                        <div className="tx-sub">{cat ? cat.name : "Fondo General"} • {t.date}</div>
+                        <div className="tx-sub">{cat ? cat.name : "Fondo General"} • {t.date ? fmtDay(t.date) : ""}</div>
                       </div>
                     </div>
                     <div className="tx-right">
                       <div className={`tx-amount ${isExpense ? "expense" : "income"}`}>
-                        {isExpense ? "-" : "+"}{money(t.amount)}
+                        {isExpense ? "-" : "+"}{money(Math.abs(t.amount))}
                       </div>
                       <button className="btn-icon" onClick={(e) => openEditTxModal(t, e)} title="Editar movimiento">
                         <Edit2 size={15} />
@@ -1776,9 +1893,42 @@ export default function App() {
                 );
               })
             )}
+            {filteredTx.length > txLimit && (
+              <button className="btn-secondary" style={{ width: "100%" }} onClick={showMoreTx}>
+                Ver más ({filteredTx.length - txLimit} restantes)
+              </button>
+            )}
           </div>
         </section>
       </main>
+
+      {/* Botón flotante: apuntar un gasto en 2 toques */}
+      {!anySheetOpen && !viewingCategoryId && (
+        <button className="fab" onClick={() => openAddTxModal({ type: "expense" })} aria-label="Nuevo gasto">
+          <Plus size={26} />
+        </button>
+      )}
+
+      {/* Fondo oscuro detrás de los formularios: tocar fuera cierra */}
+      {anySheetOpen && <div className="sheet-backdrop" onClick={closeForms} />}
+
+      {showNameSheet && (
+        <div className="form-box">
+          <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>¿Quién usa este móvil?</h3>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px" }}>
+            Tu nombre aparecerá en las notificaciones de tu pareja: "M&amp;J · {nameDraft.trim() || "Tu nombre"}".
+          </p>
+          <div className="field">
+            <label>Tu nombre</label>
+            <input type="text" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Ej. Meli" maxLength={24} autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") saveUserName(); }} />
+          </div>
+          <div className="form-actions">
+            <button className="btn-primary" onClick={saveUserName}><Check size={15} /> Guardar</button>
+            <button className="btn-secondary" onClick={() => setShowNameSheet(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {viewingCategoryId && (() => {
         const cat = categories.find((c) => c.id === viewingCategoryId);
@@ -1790,7 +1940,7 @@ export default function App() {
         const isBgLight = isLightColor(catColor);
         const catTxs = transactions
           .filter((t) => t.categoryId === cat.id)
-          .filter((t) => searchQuery === "" || t.concept.toLowerCase().includes(searchQuery.toLowerCase()));
+          .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
         return (
           <div className="modal-overlay" onClick={() => setViewingCategoryId(null)}>
@@ -1838,6 +1988,17 @@ export default function App() {
                   </div>
                 )}
 
+                {!isLocked && (
+                  <div className="quick-actions">
+                    <button className="btn-primary quick-expense" onClick={() => openAddTxModal({ type: "expense", categoryId: cat.id })}>
+                      <Plus size={16} /> Apuntar gasto
+                    </button>
+                    <button className="btn-secondary" onClick={() => openAddTxModal({ type: "income", categoryId: cat.id })}>
+                      <Wallet size={16} /> Meter dinero
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
                   <button className="btn-secondary" onClick={(e) => { openEditCategoryModal(cat, e); setViewingCategoryId(null); }}>
                     <Edit2 size={14} /> Editar sobre
@@ -1877,10 +2038,10 @@ export default function App() {
                           <div>
                             <div style={{ fontWeight: 700, fontSize: 13 }}>
                               {t.concept}
-                              {t.recurrentId && <span className="recurrent-tag">Recorrente</span>}
+                              {t.recurrentId && <span className="recurrent-tag">Recurrente</span>}
                               {isAdjustment && <span className="adjust-tag">Ajuste</span>}
                             </div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{t.date}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{t.date ? fmtDay(t.date) : ""}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div className={`tx-amount ${isExpense ? "expense" : "income"}`}>
