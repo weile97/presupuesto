@@ -1,0 +1,101 @@
+/* ===== Unicornio =====
+   Las alas giran sobre el hombro (98px 108px en el viewBox del SVG):
+   plegadas = giradas hacia el lomo y pequeñas; desplegadas = posición natural. */
+.unicorn { overflow: visible; }
+.unicorn .uni-wing { transform-origin: 98px 108px; }
+.unicorn .uni-tail { transform-origin: 54px 110px; }
+
+/* --- Carga: despliega las alas una vez y luego aletea --- */
+.unicorn-loader .uni-wing { transform: rotate(-42deg) scale(0.45); }
+.unicorn-loader .uni-wing-front { animation: wingSpread 1.1s cubic-bezier(.2,.9,.3,1.2) 0.2s forwards, wingFlap 1.3s ease-in-out 1.3s infinite; }
+.unicorn-loader .uni-wing-back { animation: wingSpreadBack 1.1s cubic-bezier(.2,.9,.3,1.2) 0.3s forwards, wingFlapBack 1.3s ease-in-out 1.4s infinite; }
+.unicorn-loader .uni-body { animation: uniFloat 2.6s ease-in-out infinite; }
+.unicorn-loader .uni-tail { animation: tailSwish 2s ease-in-out infinite; }
+.unicorn-loader .uni-sparkles path { animation: twinkle 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.unicorn-loader .uni-sparkles path:nth-child(2) { animation-delay: 0.4s; }
+.unicorn-loader .uni-sparkles path:nth-child(3) { animation-delay: 0.8s; }
+.unicorn-loader .uni-sparkles path:nth-child(4) { animation-delay: 1.2s; }
+.unicorn-loader .uni-horn { animation: hornGlow 2s ease-in-out infinite; }
+
+@keyframes wingSpread {
+  0% { transform: rotate(-42deg) scale(0.45); }
+  60% { transform: rotate(8deg) scale(1.05); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+@keyframes wingSpreadBack {
+  0% { transform: rotate(-42deg) scale(0.45); }
+  60% { transform: rotate(14deg) scale(1.02); }
+  100% { transform: rotate(6deg) scale(0.98); }
+}
+@keyframes wingFlap {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(-24deg) scale(0.92); }
+}
+@keyframes wingFlapBack {
+  0%, 100% { transform: rotate(6deg) scale(0.98); }
+  50% { transform: rotate(-16deg) scale(0.9); }
+}
+@keyframes uniFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes tailSwish { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(10deg); } }
+@keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.6); } 50% { opacity: 1; transform: scale(1.15); } }
+@keyframes hornGlow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(253,230,138,0)); } 50% { filter: drop-shadow(0 0 6px rgba(253,230,138,0.9)); } }
+
+.unicorn-loader {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: radial-gradient(circle at 50% 40%, #2A1840 0%, var(--bg-main, #0B0F17) 65%);
+  color: var(--text-main, #F8FAFC);
+  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+}
+.unicorn-loader-title {
+  font-size: 30px; font-weight: 800; letter-spacing: 0.02em;
+  background: linear-gradient(90deg, #F472B6, #C084FC, #60A5FA); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.unicorn-loader-text { font-size: 14px; font-weight: 600; color: var(--text-muted, #94A3B8); animation: fadePulse 1.6s ease-in-out infinite; }
+@keyframes fadePulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* --- Celebración al guardar --- */
+.unicorn-celebration {
+  position: fixed; left: 50%; top: 42%; z-index: 1500; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center;
+  transform: translate(-50%, -50%);
+  animation: celebrateInOut 1.9s ease forwards;
+}
+.unicorn-celebration .uni-wing-front { animation: wingFlapFast 0.32s ease-in-out infinite; }
+.unicorn-celebration .uni-wing-back { animation: wingFlapFastBack 0.32s ease-in-out 0.05s infinite; }
+.unicorn-celebration .uni-body { animation: uniHop 0.64s ease-in-out infinite; }
+.unicorn-celebration .uni-tail { animation: tailSwish 0.6s ease-in-out infinite; }
+.unicorn-celebration-text {
+  margin-top: 4px; padding: 8px 16px; border-radius: 999px; font-weight: 800; font-size: 15px; color: white;
+  background: linear-gradient(135deg, var(--pink-primary, #EC4899), var(--purple-accent, #8B5CF6));
+  box-shadow: 0 10px 30px rgba(236,72,153,0.45); white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+}
+.unicorn-celebration-burst { position: absolute; left: 50%; top: 45%; width: 0; height: 0; }
+.unicorn-celebration-burst span {
+  position: absolute; font-size: 18px; color: #FDE68A; opacity: 0;
+  animation: burst 1.1s ease-out forwards; animation-delay: calc(var(--i) * 0.03s);
+  --angle: calc(var(--i) * 36deg);
+}
+.unicorn-celebration-burst span:nth-child(even) { color: #F9A8D4; }
+.unicorn-celebration-burst span:nth-child(3n) { color: #93C5FD; }
+
+@keyframes celebrateInOut {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -54%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -80%) scale(0.9); }
+}
+@keyframes wingFlapFast { 0%, 100% { transform: rotate(4deg); } 50% { transform: rotate(-30deg) scale(0.9); } }
+@keyframes wingFlapFastBack { 0%, 100% { transform: rotate(10deg); } 50% { transform: rotate(-20deg) scale(0.88); } }
+@keyframes uniHop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes burst {
+  0% { opacity: 1; transform: rotate(var(--angle)) translateY(0) scale(0.4); }
+  100% { opacity: 0; transform: rotate(var(--angle)) translateY(-110px) scale(1.1); }
+}
+
+/* Quien tenga activado "reducir movimiento" ve el unicornio con las alas abiertas, sin animación */
+@media (prefers-reduced-motion: reduce) {
+  .unicorn *, .unicorn-celebration, .unicorn-celebration-burst span, .unicorn-loader-text { animation: none !important; }
+  .unicorn-loader .uni-wing { transform: none; }
+}
