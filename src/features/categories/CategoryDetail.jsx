@@ -18,14 +18,14 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
   const pct = cat.targetGoal > 0 ? Math.min(100, (stats.balance / cat.targetGoal) * 100) : 0;
 
   const [adjust, setAdjust] = useState("");
-  const applyAdjust = (sign) => {
+  const applyAdjust = async (sign) => {
     const text = adjust.trim().replace(/^[-+]/, "");
-    if (actions.adjustCategory(cat.id, sign < 0 ? `-${text}` : text)) setAdjust("");
+    if (await actions.adjustCategory(cat.id, sign < 0 ? `-${text}` : text)) setAdjust("");
   };
 
   const openTx = (preset) => { onClose(); openSheet("tx", { preset: { ...preset, categoryId: cat.id } }); };
-  const edit = () => {
-    if (!actions.requirePin(cat, `PIN requerido para editar "${cat.name}":`)) return;
+  const edit = async () => {
+    if (!(await actions.requirePin(cat, `PIN para editar "${cat.name}"`))) return;
     onClose();
     openSheet("category", { category: cat });
   };
@@ -103,7 +103,7 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
             <button className="btn-secondary" onClick={() => actions.clearCategory(cat.id)}>
               <Eraser size={14} /> Vaciar historial
             </button>
-            <button className="btn-secondary btn-danger" onClick={() => { if (actions.deleteCategory(cat.id)) onClose(); }}>
+            <button className="btn-secondary btn-danger" onClick={async () => { if (await actions.deleteCategory(cat.id)) onClose(); }}>
               <Trash2 size={14} /> Eliminar sobre
             </button>
           </div>
@@ -120,7 +120,7 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
                   key={t.id}
                   tx={t}
                   compact
-                  onEdit={() => { if (actions.canEditTx(t)) { onClose(); openSheet("tx", { tx: t }); } }}
+                  onEdit={async () => { if (await actions.canEditTx(t)) { onClose(); openSheet("tx", { tx: t }); } }}
                   onDelete={() => actions.deleteTransaction(t.id)}
                 />
               ))

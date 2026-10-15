@@ -7,6 +7,16 @@ import { runAutomations, describeChanges } from "../shared.js";
 
 const POLL_MS = 15000;
 
+// Cambios sin guardar en el servidor (sin conexión): se guardan en el móvil y se envían al volver la red
+const PENDING_KEY = "mj_pending";
+const readPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
+const writePending = (v) => {
+  try {
+    if (v) localStorage.setItem(PENDING_KEY, JSON.stringify(v));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch { /* sin almacenamiento */ }
+};
+
 /**
  * Datos compartidos con el servidor (Vercel + Redis):
  * - Carga inicial, guardado con control de versión y fusión si los dos móviles editan a la vez.
@@ -59,6 +69,7 @@ export function useBudgetSync({ userName, onMessage }) {
           if (res.ok) {
             revRef.current = String(body._rev ?? revRef.current);
             baseRef.current = toSend;
+            if (!pendingRef.current) writePending(null);
             return;
           }
           if (res.status === 409 && body.data) {
@@ -77,7 +88,9 @@ export function useBudgetSync({ userName, onMessage }) {
       } catch (err) {
         console.error("Error guardando datos:", err);
         pendingRef.current = true; // se reintentará al volver la conexión / en el siguiente sondeo
-        onMessageRef.current?.("No se pudo guardar. Se reintentará automáticamente.", "error");
+        onMessageRef.current?.(navigator.onLine === false
+          ? "Sin conexión: el cambio se guardará al volver la red."
+          : "No se pudo guardar. Se reintentará automáticamente.", "error");
       } finally {
         busyRef.current = false;
       }
@@ -96,8 +109,11 @@ export function useBudgetSync({ userName, onMessage }) {
     dataRef.current = stamped;
     pendingRef.current = true;
     setData(stamped);
+    writePending({ base: baseRef.current, local: stamped });
     flushSave();
   }, [flushSave]);
+
+  const getData = useCallback(() => dataRef.current, []);
 
   const refreshFromServer = useCallback(async () => {
     if (pendingRef.current) return flushSave();
@@ -136,14 +152,22 @@ export function useBudgetSync({ userName, onMessage }) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((remote) => applyRemote(remote))
+      .then((remote) => {
+        const remoteData = applyRemote(remote);
+        // Cambios hechos sin conexión en una sesión anterior: se fusionan con lo del servidor y se envían
+        const pending = readPending();
+        if (pending?.base && pending?.local) {
+          save(mergeData(pending.base, pending.local, remoteData));
+          onMessageRef.current?.("Se han recuperado cambios hechos sin conexión.", "success");
+        }
+      })
       .catch((err) => {
         console.error("Error cargando base de datos:", err);
         // No ponemos datos vacíos: mostramos un aviso en vez de aparentar que se ha borrado todo
         setLoadError(true);
       })
       .finally(() => setLoading(false));
-  }, [applyRemote]);
+  }, [applyRemote, save]);
 
   // Sondeo solo con la app visible (ahorra batería) + refresco inmediato en eventos
   useEffect(() => {
@@ -171,5 +195,5 @@ export function useBudgetSync({ userName, onMessage }) {
     };
   }, [loading, refreshFromServer, runPendingAutomations]);
 
-  return { data, loading, loadError, save };
+  return { data, loading, loadError, save, getData, refresh: refreshFromServer };
 }

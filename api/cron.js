@@ -2,7 +2,7 @@
 // Hace el cambio de ciclo del día 29 y aplica los recurrentes aunque nadie abra la app,
 // y avisa a los móviles por push.
 import { getRedis, readData, saveData, notifySubscribers, withTimeout, setCommonHeaders } from '../lib/store.js';
-import { runAutomations } from '../src/shared.js';
+import { runAutomations, cycleEndSummary } from '../src/shared.js';
 
 export default async function handler(req, res) {
   setCommonHeaders(res, 'GET, OPTIONS');
@@ -19,6 +19,13 @@ export default async function handler(req, res) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data, rawExists, rev } = await readData(redis);
       if (!rawExists) return res.status(200).json({ skipped: 'sin datos' });
+
+      // Cron de la tarde (?summary=1): solo la víspera del día 29, resumen de lo gastado y lo que queda sin repartir
+      if (req.query?.summary) {
+        const endSummary = cycleEndSummary(data);
+        if (endSummary) await withTimeout(notifySubscribers(redis, endSummary, null), 8000);
+        return res.status(200).json({ endSummary: !!endSummary });
+      }
 
       const result = runAutomations(data);
       if (!result) return res.status(200).json({ changed: false });

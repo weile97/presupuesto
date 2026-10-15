@@ -31,7 +31,7 @@ export default function TransactionsSection({ transactions, catById, actions, op
   const filterKey = `${categoryFilter}|${search}|${range}`;
   const limit = paging.key === filterKey ? paging.n : TX_PAGE;
 
-  const edit = (t) => { if (actions.canEditTx(t)) openSheet("tx", { tx: t }); };
+  const edit = async (t) => { if (await actions.canEditTx(t)) openSheet("tx", { tx: t }); };
 
   return (
     <section>

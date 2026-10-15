@@ -3,7 +3,7 @@ import Sheet, { Field } from "../../components/ui/Sheet.jsx";
 import { sendTestPush } from "../../lib/push.js";
 
 // "¿Quién usa este móvil?": el nombre aparece en las notificaciones de la pareja
-export default function NameForm({ initial, onSave, onClose, notify }) {
+export default function NameForm({ initial, onSave, onClose, notify, onOpenBackups }) {
   const [name, setName] = useState(initial || "");
   const [testing, setTesting] = useState(false);
 
@@ -20,7 +20,7 @@ export default function NameForm({ initial, onSave, onClose, notify }) {
 
   return (
     <Sheet
-      title="¿Quién usa este móvil?"
+      title="Ajustes de este móvil"
       subtitle={`Tu nombre aparecerá en las notificaciones: "M&J · ${name.trim() || "Tu nombre"}".`}
       onClose={onClose}
       onSubmit={() => onSave(name)}
@@ -37,6 +37,9 @@ export default function NameForm({ initial, onSave, onClose, notify }) {
           🔔 {testing ? "Enviando en 10 s… bloquea el móvil" : "Enviar aviso de prueba"}
         </button>
       </div>
+      <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 12 }} onClick={onOpenBackups}>
+        🛟 Copias de seguridad
+      </button>
     </Sheet>
   );
 }

@@ -22,6 +22,9 @@ import TransactionsSection from "./features/transactions/TransactionsSection.jsx
 import TransactionForm from "./features/transactions/TransactionForm.jsx";
 import RecurrentsSection, { RecurrentForm } from "./features/recurrents/RecurrentsSection.jsx";
 import NameForm from "./features/settings/NameForm.jsx";
+import BackupsForm from "./features/settings/BackupsForm.jsx";
+import CycleSummary from "./features/summary/CycleSummary.jsx";
+import PinDialog from "./components/ui/PinDialog.jsx";
 
 // Tiempo mínimo de la pantalla de carga, para que se vea al unicornio desplegar las alas
 const MIN_LOADER_MS = 1400;
@@ -30,7 +33,7 @@ export default function App() {
   // --- Avisos -------------------------------------------------------------
   const [toast, setToast] = useState(null);
   const [celebration, setCelebration] = useState(null);
-  const notify = useCallback((message, type = "success") => setToast({ message, type, id: Date.now() }), []);
+  const notify = useCallback((message, type = "success", action = null) => setToast({ message, type, action, id: Date.now() }), []);
   const celebrate = useCallback((message) => setCelebration({ message, id: Date.now() }), []);
   const closeToast = useCallback(() => setToast(null), []);
   const endCelebration = useCallback(() => setCelebration(null), []);
@@ -39,9 +42,14 @@ export default function App() {
   const [userName, setUserName] = useState(readUserName);
 
   // --- Datos -------------------------------------------------------------------
-  const { data, loading, loadError, save } = useBudgetSync({ userName, onMessage: notify });
+  const { data, loading, loadError, save, getData, refresh } = useBudgetSync({ userName, onMessage: notify });
+
+  // Ventana de PIN: askPin(título) devuelve una promesa con el PIN escrito o null
+  const [pinRequest, setPinRequest] = useState(null);
+  const askPin = useCallback((title) => new Promise((resolve) => setPinRequest({ title, resolve, id: Date.now() })), []);
+  const answerPin = (pin) => { pinRequest?.resolve(pin); setPinRequest(null); };
   const stats = useBudgetStats(data);
-  const actions = useBudgetActions({ data, stats, save, notify, celebrate });
+  const actions = useBudgetActions({ data, stats, save, getData, notify, celebrate, askPin, userName });
   const push = usePushNotifications(notify);
 
   // --- Navegación: una hoja (formulario) y/o el detalle de un sobre ---------------
@@ -96,7 +104,7 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onClose={closeToast} />}
+      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} action={toast.action} onClose={closeToast} />}
       {celebration && <UnicornCelebration key={celebration.id} message={celebration.message} onDone={endCelebration} />}
 
       <Header
@@ -110,6 +118,7 @@ export default function App() {
 
       <main className="main-content">
         <Summary fund={fund} cycle={cycle} hasSources={sources.length > 0} onRegisterPayroll={() => openSheet("bulkPayroll")} />
+        <CycleSummary categories={categories} cycleSummary={stats.cycleSummary} isLocked={actions.isLocked} />
         <PayrollSection sources={sources} lastPayrollBySource={lastPayrollBySource} openSheet={openSheet} actions={actions} />
         <CategoriesSection
           categories={categories}
@@ -153,9 +162,11 @@ export default function App() {
       {sheet?.type === "bulkPayroll" && <BulkPayrollForm key={sheet.n} {...formProps} sources={sources} />}
       {sheet?.type === "category" && <CategoryForm key={sheet.n} {...formProps} category={sheet.category} />}
       {sheet?.type === "transfer" && <TransferForm key={sheet.n} {...formProps} categories={categories} from={sheet.from} />}
-      {sheet?.type === "tx" && <TransactionForm key={sheet.n} {...formProps} tx={sheet.tx} preset={sheet.preset} categories={categories} />}
+      {sheet?.type === "tx" && <TransactionForm key={sheet.n} {...formProps} tx={sheet.tx} preset={sheet.preset} categories={categories} payers={stats.payers} />}
       {sheet?.type === "recurrent" && <RecurrentForm key={sheet.n} {...formProps} categories={categories} />}
-      {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} notify={notify} />}
+      {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} notify={notify} onOpenBackups={() => openSheet("backups")} />}
+      {sheet?.type === "backups" && <BackupsForm key={sheet.n} userName={userName} notify={notify} onRestored={refresh} onClose={closeSheet} />}
+      {pinRequest && <PinDialog key={pinRequest.id} title={pinRequest.title} onDone={answerPin} />}
     </div>
   );
 }

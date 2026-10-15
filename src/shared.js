@@ -27,6 +27,40 @@ export function currentCycle(today = todayLocal()) {
   return { key: `${cy}-${pad(cm)}`, start: cycleStartOf(cy, cm), nextStart: cycleStartOf(ny, nm) };
 }
 
+// Ciclo anterior al que empieza en `start`
+export function previousCycle(start) {
+  const d = new Date(`${start}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return currentCycle(d.toISOString().slice(0, 10));
+}
+
+const CAT_IN = new Set(['income', 'transfer_income', 'adjustment_income']);
+const CAT_OUT = new Set(['expense', 'transfer_expense', 'adjustment_expense']);
+
+// Saldo de cada sobre: { [id]: { income, expense, balance } }
+export function categoryBalances(categories = [], transactions = []) {
+  const map = {};
+  for (const c of categories) map[c.id] = { income: 0, expense: 0, balance: c.initialBalance || 0 };
+  for (const t of transactions) {
+    const e = map[t.categoryId];
+    if (!e) continue;
+    if (CAT_IN.has(t.type)) e.income += t.amount || 0;
+    if (CAT_OUT.has(t.type)) e.expense += t.amount || 0;
+  }
+  for (const id in map) map[id].balance = Math.round((map[id].balance + map[id].income - map[id].expense) * 100) / 100;
+  return map;
+}
+
+// Gasto real (type "expense") por sobre entre dos fechas [from, to)
+export function expensesBetween(transactions = [], from, to) {
+  const map = {};
+  for (const t of transactions) {
+    if (t.type !== 'expense' || !t.date || t.date < from || t.date >= to) continue;
+    map[t.categoryId] = (map[t.categoryId] || 0) + (t.amount || 0);
+  }
+  return map;
+}
+
 export const isAllocation = (t) => t.type === 'income' && !!t.categoryId;
 export const isFundIncome = (t) => t.type === 'payroll_income' || t.type === 'carryover';
 export const isExpenseType = (type) => type === 'expense' || type === 'transfer_expense' || type === 'adjustment_expense';
@@ -126,6 +160,20 @@ export function runAutomations(data, today = todayLocal()) {
   return current === data ? null : { data: current, messages };
 }
 
+// Resumen para el aviso de la víspera del cambio de ciclo (null si mañana no empieza ciclo)
+export function cycleEndSummary(data, today = todayLocal()) {
+  const { start, nextStart } = currentCycle(today);
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  if (d.toISOString().slice(0, 10) !== nextStart) return null;
+  const fund = computeFund(data.transactions);
+  const spent = Object.values(expensesBetween(data.transactions, start, nextStart)).reduce((a, b) => a + b, 0);
+  return {
+    title: 'M&J 🦄 · Fin de ciclo',
+    body: `🗓️ Mañana empieza un ciclo nuevo.\n💸 Gastado este ciclo: ${money(spent)}\n💰 Sin repartir en el Fondo General: ${money(fund.available)}`
+  };
+}
+
 // --- Texto de las notificaciones -------------------------------------
 const money = (n) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100);
@@ -176,6 +224,16 @@ export function describeChanges(prev, next) {
 
   const pSrc = new Set((prev?.sources || []).map((s) => s.id));
   for (const s of next?.sources || []) if (!pSrc.has(s.id)) lines.push(`💼 Nueva fuente de nómina: ${s.name}`);
+
+  // Alertas de presupuesto: sobre en negativo o meta alcanzada (solo al cruzar el límite)
+  const before = categoryBalances(prev?.categories, prev?.transactions);
+  const after = categoryBalances(next?.categories, next?.transactions);
+  for (const c of next?.categories || []) {
+    if (c.hasPin || !before[c.id]) continue;
+    const b = before[c.id].balance, a = after[c.id].balance;
+    if (a < 0 && b >= 0) lines.push(`🚨 ${c.name} se ha quedado en negativo: ${money(a)}`);
+    if (c.targetGoal > 0 && a >= c.targetGoal && b < c.targetGoal) lines.push(`🎯 ${c.name} ha alcanzado su meta de ${money(c.targetGoal)}`);
+  }
 
   const clean = lines.filter(Boolean);
   if (clean.length === 0) {

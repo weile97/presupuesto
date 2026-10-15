@@ -9,10 +9,10 @@ export function CategoryForm({ category, actions, onClose }) {
   const [color, setColor] = useState(category?.color || PRESET_COLORS[0]);
   const [goal, setGoal] = useState(category?.targetGoal ? String(category.targetGoal).replace(".", ",") : "");
   const [hasPin, setHasPin] = useState(!!category?.hasPin);
-  const [pin, setPin] = useState(category?.pin || "");
+  const [pin, setPin] = useState("");
   const [adjust, setAdjust] = useState("");
 
-  const submit = () => actions.saveCategory({ id: category?.id, name, icon, color, hasPin, pin, goal }) && onClose();
+  const submit = async () => (await actions.saveCategory({ id: category?.id, name, icon, color, hasPin, pin, goal })) && onClose();
 
   return (
     <Sheet title={category ? `Editar sobre: ${category.name}` : "Crear sobre"} onClose={onClose} onSubmit={submit}>
@@ -33,7 +33,7 @@ export function CategoryForm({ category, actions, onClose }) {
       </label>
       {hasPin && (
         <Field label="PIN" style={{ maxWidth: 220 }}>
-          <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} autoComplete="new-password" />
+          <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} autoComplete="new-password" placeholder={category?.hasPin ? "Vacío = mantener el PIN actual" : "Nuevo PIN"} />
         </Field>
       )}
 
@@ -42,7 +42,7 @@ export function CategoryForm({ category, actions, onClose }) {
           <label>Ajustar saldo del sobre (no afecta al Fondo General)</label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <AmountInput value={adjust} onChange={(e) => setAdjust(e.target.value)} placeholder="Ej. 50 o -20" inputMode="text" />
-            <button type="button" className="btn-secondary" onClick={() => actions.adjustCategory(category.id, adjust) && setAdjust("")}>
+            <button type="button" className="btn-secondary" onClick={async () => (await actions.adjustCategory(category.id, adjust)) && setAdjust("")}>
               Aplicar
             </button>
           </div>
@@ -59,7 +59,7 @@ export function TransferForm({ categories, from: initialFrom = "", actions, onCl
   const [amount, setAmount] = useState("");
   const options = categories.map((c) => <option key={c.id} value={c.id}>{c.name} {c.hasPin ? "🔒" : ""}</option>);
 
-  const submit = () => actions.transfer({ from, to, amount }) && onClose();
+  const submit = async () => (await actions.transfer({ from, to, amount })) && onClose();
 
   return (
     <Sheet title="Traspaso entre sobres" onClose={onClose} onSubmit={submit} submitLabel="Confirmar traspaso">

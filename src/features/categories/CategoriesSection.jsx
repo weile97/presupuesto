@@ -61,7 +61,7 @@ export default function CategoriesSection({ categories, categoryBalances, action
   );
 
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
-  const editCategory = (cat) => { if (actions.requirePin(cat, `PIN requerido para editar "${cat.name}":`)) openSheet("category", { category: cat }); };
+  const editCategory = async (cat) => { if (await actions.requirePin(cat, `PIN para editar "${cat.name}"`)) openSheet("category", { category: cat }); };
 
   return (
     <section>

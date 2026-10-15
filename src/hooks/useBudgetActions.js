@@ -1,13 +1,30 @@
-import { useState, useEffect } from "react";
-import { uid, todayISO, money, parseAmount, hashPin, pinMatches, nextMonthKey } from "../lib/format.js";
+import { useState, useEffect, useRef } from "react";
+import { uid, todayISO, money, parseAmount, nextMonthKey } from "../lib/format.js";
+import { hashPin, pinMatches, isSecureHash, migrateCategoryPins } from "../lib/pin.js";
 import { isAllocation } from "../shared.js";
+
+// --- Deshacer: funciones que devuelven el estado con el cambio revertido -------------------
+const withIndex = (arr, pred) => arr.map((item, index) => ({ item, index })).filter(({ item }) => pred(item));
+const reinsert = (key, removed) => (cur) => {
+  const list = [...(cur[key] || [])];
+  const ids = new Set(list.map((x) => x.id));
+  for (const { item, index } of removed) if (!ids.has(item.id)) list.splice(Math.min(index, list.length), 0, item);
+  return { ...cur, [key]: list };
+};
+const removeIds = (key, ids) => (cur) => ({ ...cur, [key]: (cur[key] || []).filter((x) => !ids.includes(x.id)) });
+const restoreItem = (key, old) => (cur) => ({ ...cur, [key]: (cur[key] || []).map((x) => (x.id === old.id ? old : x)) });
+const compose = (...fns) => (cur) => fns.reduce((acc, fn) => fn(acc), cur);
 
 /**
  * Todas las operaciones que modifican el presupuesto. Cada una valida, guarda y avisa.
- * Las que vienen de un formulario devuelven true si se ha guardado (para cerrar el formulario).
+ * Las que vienen de un formulario devuelven (una promesa de) true si se ha guardado, para cerrarlo.
  */
-export function useBudgetActions({ data, stats, save, notify, celebrate }) {
+export function useBudgetActions({ data, stats, save, getData, notify, celebrate, askPin, userName }) {
   const { sources, categories, transactions, recurrents, fund, catById, categoryBalances } = stats;
+
+  // Aviso con botón "Deshacer": aplica la reversión sobre los datos ACTUALES (por si la pareja cambió algo)
+  const undoable = (message, revert) =>
+    notify(message, "success", { label: "Deshacer", onClick: () => { save(revert(getData())); notify("Cambio deshecho."); } });
 
   // --- Sobres con PIN: se desbloquean 60 s ---------------------------------
   const [unlockedCats, setUnlockedCats] = useState({});
@@ -20,21 +37,37 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
     return () => clearTimeout(timer);
   }, [unlockedCats, notify]);
 
+  // Migración: los PIN antiguos (en claro o base64) pasan a hash SHA-256 y se borra el PIN en claro
+  const migratingRef = useRef(false);
+  useEffect(() => {
+    if (migratingRef.current || !data?.categories) return;
+    migratingRef.current = true;
+    migrateCategoryPins(data.categories)
+      .then((migrated) => {
+        if (!migrated) return;
+        const byId = new Map(migrated.map((c) => [c.id, c]));
+        const cur = getData();
+        save({ ...cur, categories: cur.categories.map((c) => byId.get(c.id) || c) });
+      })
+      .catch((err) => console.error("Error migrando PIN:", err))
+      .finally(() => { migratingRef.current = false; });
+  }, [data?.categories, getData, save]);
+
   const isLocked = (cat) => !!cat?.hasPin && !unlockedCats[cat.id];
 
   // Pide el PIN si el sobre está protegido. always=true lo pide aunque esté desbloqueado (borrados).
-  function requirePin(cat, message, always = false) {
+  async function requirePin(cat, title, always = false) {
     if (!cat?.hasPin || (!always && unlockedCats[cat.id])) return true;
-    const entered = prompt(message);
+    const entered = await askPin(title);
     if (entered === null) return false;
-    if (pinMatches(cat, entered)) return true;
-    notify("Contraseña incorrecta.", "error");
+    if (await pinMatches(cat, entered)) return true;
+    notify("PIN incorrecto.", "error");
     return false;
   }
 
-  function toggleUnlock(cat) {
+  async function toggleUnlock(cat) {
     if (unlockedCats[cat.id]) return setUnlockedCats((p) => ({ ...p, [cat.id]: false }));
-    if (requirePin(cat, `Contraseña para "${cat.name}":`, true)) {
+    if (await requirePin(cat, `PIN de "${cat.name}"`, true)) {
       setUnlockedCats((p) => ({ ...p, [cat.id]: true }));
       notify(`Sobre "${cat.name}" desbloqueado.`);
     }
@@ -52,8 +85,9 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
   function depositPayroll(src, amountText) {
     const amt = parseAmount(amountText);
     if (isNaN(amt) || amt <= 0) return fail("Introduce un importe de nómina válido.");
-    addTxs([payrollTx(src, amt)]);
-    notify(`Se han añadido ${money(amt)} al Fondo General.`);
+    const tx = payrollTx(src, amt);
+    addTxs([tx]);
+    undoable(`Se han añadido ${money(amt)} al Fondo General.`, removeIds("transactions", [tx.id]));
     return true;
   }
 
@@ -64,8 +98,8 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
       .map(({ src, amt }) => payrollTx(src, amt));
     if (newTxs.length === 0) return fail("Introduce al menos un importe válido.");
     addTxs(newTxs);
-    notify(`Se han añadido ${money(newTxs.reduce((a, t) => a + t.amount, 0))} al Fondo General.`);
     celebrate("¡Nóminas registradas!");
+    undoable(`Se han añadido ${money(newTxs.reduce((a, t) => a + t.amount, 0))} al Fondo General.`, removeIds("transactions", newTxs.map((t) => t.id)));
     return true;
   }
 
@@ -83,43 +117,47 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
   }
 
   function deleteSource(id) {
-    if (!window.confirm("¿Eliminar esta fuente de nómina?")) return;
+    const removed = withIndex(sources, (s) => s.id === id);
     save({ ...data, sources: sources.filter((s) => s.id !== id) });
-    notify("Fuente de nómina eliminada.");
+    undoable("Fuente de nómina eliminada.", reinsert("sources", removed));
   }
 
   // --- Sobres ------------------------------------------------------------------
-  function saveCategory({ id, name, icon, color, hasPin, pin, goal }) {
+  async function saveCategory({ id, name, icon, color, hasPin, pin, goal }) {
     const n = name.trim();
     if (!n) return fail("Pon un nombre al sobre.");
-    if (hasPin && !pin.trim()) return fail("Asigna un PIN al sobre.");
+    const existing = id ? catById.get(id) : null;
+    const newId = id || uid();
+    let pinHash = "";
+    if (hasPin) {
+      if (pin.trim()) pinHash = await hashPin(newId, pin);
+      else if (isSecureHash(existing)) pinHash = existing.pinHash; // vacío = mantener el PIN actual
+      else return fail("Asigna un PIN al sobre.");
+    }
     const goalParsed = parseAmount(goal);
-    const fields = {
-      name: n, icon, color, hasPin,
-      pinHash: hasPin ? hashPin(pin) : "",
-      pin: hasPin ? pin.trim() : "",
-      targetGoal: isNaN(goalParsed) ? 0 : goalParsed
-    };
+    const fields = { name: n, icon, color, hasPin, pinHash, targetGoal: isNaN(goalParsed) ? 0 : goalParsed };
+    const cur = getData();
     save({
-      ...data,
+      ...cur,
       categories: id
-        ? categories.map((c) => (c.id === id ? { ...c, ...fields } : c))
-        : [...categories, { id: uid(), initialBalance: 0, ...fields }]
+        ? cur.categories.map((c) => { if (c.id !== id) return c; const { pin: _pin, ...rest } = c; return { ...rest, ...fields }; })
+        : [...cur.categories, { id: newId, initialBalance: 0, ...fields }]
     });
     celebrate(id ? "¡Sobre guardado!" : "¡Sobre creado!");
     return true;
   }
 
-  function adjustCategory(catId, amountText) {
+  async function adjustCategory(catId, amountText) {
     const cat = catById.get(catId);
+    if (!cat || !(await requirePin(cat, `PIN de "${cat.name}"`))) return false;
     const amt = parseAmount(amountText);
-    if (!cat || !requirePin(cat, `PIN requerido para ajustar "${cat.name}":`)) return false;
-    if (isNaN(amt) || amt === 0) return fail("Introduce una cantidad válida (positiva o negativa).");
-    addTxs([{
+    if (isNaN(amt) || amt === 0) return fail("Introduce una cantidad válida.");
+    const tx = {
       id: uid(), concept: `Ajuste manual de saldo: ${cat.name}`, categoryId: catId, sourceId: null,
       type: amt > 0 ? "adjustment_income" : "adjustment_expense", amount: Math.abs(amt), date: todayISO()
-    }]);
-    notify(`Saldo de "${cat.name}" ajustado en ${amt > 0 ? "+" : ""}${money(amt)}. No afecta al Fondo General.`);
+    };
+    save({ ...getData(), transactions: [tx, ...getData().transactions] });
+    undoable(`"${cat.name}" ${amt > 0 ? "+" : ""}${money(amt)}. No afecta al Fondo General.`, removeIds("transactions", [tx.id]));
     return true;
   }
 
@@ -134,7 +172,7 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
     save({ ...data, categories: reordered });
   }
 
-  // Mover un sobre una posición arriba (-1) o abajo (+1): reordenar en el móvil sin arrastrar
+  // Mover un sobre una posición arriba (-1) o abajo (+1)
   function shiftCategory(id, dir) {
     const i = categories.findIndex((c) => c.id === id);
     const j = i + dir;
@@ -142,84 +180,90 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
     moveCategory(id, categories[j].id);
   }
 
-  function deleteCategory(id) {
+  async function deleteCategory(id) {
     const cat = catById.get(id);
-    if (!cat || !requirePin(cat, `Contraseña para eliminar "${cat.name}":`, true)) return false;
-    if (!window.confirm(`¿Eliminar el sobre "${cat.name}"? Se borrará también su historial de movimientos. No se puede deshacer.`)) return false;
-    save({
-      ...data,
-      categories: categories.filter((c) => c.id !== id),
-      transactions: transactions.filter((t) => t.categoryId !== id)
-    });
-    notify("Sobre eliminado.");
+    if (!cat || !(await requirePin(cat, `PIN para eliminar "${cat.name}"`, true))) return false;
+    const cur = getData();
+    const removedCat = withIndex(cur.categories, (c) => c.id === id);
+    const removedTxs = withIndex(cur.transactions, (t) => t.categoryId === id);
+    save({ ...cur, categories: cur.categories.filter((c) => c.id !== id), transactions: cur.transactions.filter((t) => t.categoryId !== id) });
+    undoable(`Sobre "${cat.name}" eliminado.`, compose(reinsert("categories", removedCat), reinsert("transactions", removedTxs)));
     return true;
   }
 
-  function clearCategory(id) {
+  async function clearCategory(id) {
     const cat = catById.get(id);
-    if (!cat || !requirePin(cat, `PIN para vaciar "${cat.name}":`, true)) return;
-    if (!window.confirm(`¿Vaciar el historial de "${cat.name}"?`)) return;
-    save({ ...data, transactions: transactions.filter((t) => t.categoryId !== id) });
-    notify("Historial del sobre vaciado.");
+    if (!cat || !(await requirePin(cat, `PIN para vaciar "${cat.name}"`, true))) return;
+    const cur = getData();
+    const removed = withIndex(cur.transactions, (t) => t.categoryId === id);
+    if (removed.length === 0) return notify("Este sobre no tiene movimientos.", "error");
+    save({ ...cur, transactions: cur.transactions.filter((t) => t.categoryId !== id) });
+    undoable(`Historial de "${cat.name}" vaciado.`, reinsert("transactions", removed));
   }
 
   function clearAllTransactions() {
-    if (!window.confirm("⚠️ ¿Vaciar todo el historial de movimientos?")) return;
+    if (!window.confirm("⚠️ ¿Vaciar TODO el historial de movimientos?")) return;
+    const removed = withIndex(transactions, () => true);
     save({ ...data, transactions: [] });
-    notify("Historial vaciado.");
+    undoable("Historial vaciado.", reinsert("transactions", removed));
   }
 
-  function transfer({ from, to, amount }) {
+  async function transfer({ from, to, amount }) {
     const amt = parseAmount(amount);
     if (!from || !to || isNaN(amt) || amt <= 0) return fail("Completa los datos del traspaso.");
     if (from === to) return fail("Elige dos sobres diferentes.");
     const fromCat = catById.get(from), toCat = catById.get(to);
-    if (!requirePin(fromCat, `PIN para sacar dinero de "${fromCat.name}":`)) return false;
-    if (!requirePin(toCat, `PIN para meter dinero en "${toCat.name}":`)) return false;
+    if (!(await requirePin(fromCat, `PIN de "${fromCat.name}"`))) return false;
+    if (!(await requirePin(toCat, `PIN de "${toCat.name}"`))) return false;
     if ((categoryBalances[from]?.balance || 0) < amt) return fail(`Saldo insuficiente en "${fromCat.name}".`);
     const date = todayISO();
-    addTxs([
+    const txs = [
       { id: uid(), concept: `Traspaso ➔ ${toCat.name}`, categoryId: from, sourceId: null, type: "transfer_expense", amount: amt, date },
       { id: uid(), concept: `Traspaso desde ${fromCat.name}`, categoryId: to, sourceId: null, type: "transfer_income", amount: amt, date }
-    ]);
-    notify(`Traspaso de ${money(amt)} completado.`);
+    ];
+    save({ ...getData(), transactions: [...txs, ...getData().transactions] });
+    undoable(`Traspaso de ${money(amt)} completado.`, removeIds("transactions", txs.map((t) => t.id)));
     return true;
   }
 
   // --- Movimientos ---------------------------------------------------------------
-  const canEditTx = (t) => requirePin(catById.get(t.categoryId), `PIN requerido para modificar este movimiento:`);
+  const canEditTx = (t) => requirePin(catById.get(t.categoryId), "PIN para modificar este movimiento");
 
-  function saveTransaction({ id, concept, categoryId, type, amount, date }) {
+  async function saveTransaction({ id, concept, categoryId, type, amount, date, paidBy }) {
     const amt = parseAmount(amount);
     if (!concept.trim() || isNaN(amt) || amt <= 0 || !categoryId) return fail("Completa todos los campos correctamente.");
     const cat = catById.get(categoryId);
-    if (!requirePin(cat, `PIN requerido para "${cat?.name}":`)) return false;
+    if (!(await requirePin(cat, `PIN de "${cat?.name}"`))) return false;
 
+    const cur = getData();
     if (type === "income") {
       // Lo asignado en ciclos anteriores (settled) ya no cuenta en el Fondo General de este ciclo
-      const editing = id ? transactions.find((t) => t.id === id) : null;
+      const editing = id ? cur.transactions.find((t) => t.id === id) : null;
       const previous = editing && isAllocation(editing) && !editing.settled ? editing.amount || 0 : 0;
       if (fund.available + previous < amt) return fail("Saldo insuficiente en el Fondo General para asignar.");
     }
 
-    const fields = { concept: concept.trim(), categoryId, type, amount: amt, date: date || todayISO() };
+    const fields = { concept: concept.trim(), categoryId, type, amount: amt, date: date || todayISO(), paidBy: type === "expense" ? paidBy || null : null };
     if (id) {
-      save({ ...data, transactions: transactions.map((t) => (t.id === id ? { ...t, ...fields } : t)) });
-      notify("Movimiento actualizado.");
+      const old = cur.transactions.find((t) => t.id === id);
+      save({ ...cur, transactions: cur.transactions.map((t) => (t.id === id ? { ...t, ...fields } : t)) });
+      if (old) undoable("Movimiento actualizado.", restoreItem("transactions", old));
     } else {
-      addTxs([{ id: uid(), sourceId: null, ...fields }]);
+      const tx = { id: uid(), sourceId: null, ...fields };
+      save({ ...cur, transactions: [tx, ...cur.transactions] });
       if (type === "income") celebrate(`¡${money(amt)} al sobre ${cat?.name || ""}!`);
-      else notify("Movimiento registrado.");
+      undoable(type === "income" ? "Dinero asignado al sobre." : `Gasto de ${money(amt)} apuntado.`, removeIds("transactions", [tx.id]));
     }
     return true;
   }
 
-  function deleteTransaction(id) {
+  async function deleteTransaction(id) {
     const t = transactions.find((x) => x.id === id);
-    if (!t || !canEditTx(t)) return;
-    if (!window.confirm(`¿Eliminar "${t.concept}"?`)) return;
-    save({ ...data, transactions: transactions.filter((x) => x.id !== id) });
-    notify("Movimiento eliminado.");
+    if (!t || !(await canEditTx(t))) return;
+    const cur = getData();
+    const removed = withIndex(cur.transactions, (x) => x.id === id);
+    save({ ...cur, transactions: cur.transactions.filter((x) => x.id !== id) });
+    undoable(`"${t.concept}" eliminado.`, reinsert("transactions", removed));
   }
 
   // --- Recurrentes -----------------------------------------------------------------
@@ -238,9 +282,9 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
   }
 
   function deleteRecurrent(id) {
-    if (!window.confirm("¿Eliminar esta regla recurrente?")) return;
+    const removed = withIndex(recurrents, (r) => r.id === id);
     save({ ...data, recurrents: recurrents.filter((r) => r.id !== id) });
-    notify("Regla recurrente eliminada.");
+    undoable("Regla recurrente eliminada.", reinsert("recurrents", removed));
   }
 
   function applyRecurrentsNow() {
@@ -255,7 +299,7 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
       }));
     if (newTxs.length === 0) return notify("Los recurrentes de este mes ya están aplicados.", "error");
     addTxs(newTxs);
-    notify(`Se aplicaron ${newTxs.length} movimientos recurrentes.`);
+    undoable(`Se aplicaron ${newTxs.length} movimientos recurrentes.`, removeIds("transactions", newTxs.map((t) => t.id)));
   }
 
   // --- Exportar ---------------------------------------------------------------------
@@ -264,8 +308,8 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
     if (rows.length === 0) return notify("No hay movimientos públicos para exportar.", "error");
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     // ";" y BOM para que Excel en español lo abra bien; Blob en vez de data: URI (fallaba con "#" y en móviles)
-    const csv = "﻿Fecha;Concepto;Tipo;Importe;Sobre\n" + rows.map((t) =>
-      [t.date, esc(t.concept), t.type, String(t.amount).replace(".", ","), esc(catById.get(t.categoryId)?.name || "Fondo General")].join(";")
+    const csv = "﻿Fecha;Concepto;Tipo;Importe;Sobre;Pagado por\n" + rows.map((t) =>
+      [t.date, esc(t.concept), t.type, String(t.amount).replace(".", ","), esc(catById.get(t.categoryId)?.name || "Fondo General"), esc(t.paidBy || "")].join(";")
     ).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -278,7 +322,7 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
   }
 
   return {
-    unlockedCats, isLocked, requirePin, toggleUnlock,
+    unlockedCats, isLocked, requirePin, toggleUnlock, userName,
     depositPayroll, bulkPayroll, saveSource, deleteSource,
     saveCategory, adjustCategory, moveCategory, shiftCategory, deleteCategory, clearCategory, transfer,
     canEditTx, saveTransaction, deleteTransaction, clearAllTransactions,

@@ -1,9 +1,6 @@
 import { useMemo } from "react";
 import { EMPTY } from "../lib/constants.js";
-import { computeFund, currentCycle } from "../shared.js";
-
-const CAT_INCOME = new Set(["income", "transfer_income", "adjustment_income"]);
-const CAT_EXPENSE = new Set(["expense", "transfer_expense", "adjustment_expense"]);
+import { computeFund, currentCycle, previousCycle, categoryBalances as calcBalances, expensesBetween } from "../shared.js";
 
 // Valores derivados de los datos (saldos, Fondo General, ciclo). Se recalculan solo si cambian los datos.
 export function useBudgetStats(data) {
@@ -11,22 +8,11 @@ export function useBudgetStats(data) {
   const categories = data?.categories || EMPTY;
   const transactions = data?.transactions || EMPTY;
   const recurrents = data?.recurrents || EMPTY;
+  const cycle = currentCycle();
 
   const fund = useMemo(() => computeFund(transactions), [transactions]);
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-
-  const categoryBalances = useMemo(() => {
-    const map = {};
-    for (const c of categories) map[c.id] = { income: 0, expense: 0, balance: c.initialBalance || 0 };
-    for (const t of transactions) {
-      const entry = map[t.categoryId];
-      if (!entry) continue;
-      if (CAT_INCOME.has(t.type)) entry.income += t.amount || 0;
-      if (CAT_EXPENSE.has(t.type)) entry.expense += t.amount || 0;
-    }
-    for (const id in map) map[id].balance += map[id].income - map[id].expense;
-    return map;
-  }, [categories, transactions]);
+  const categoryBalances = useMemo(() => calcBalances(categories, transactions), [categories, transactions]);
 
   // Última nómina registrada por fuente
   const lastPayrollBySource = useMemo(() => {
@@ -38,9 +24,26 @@ export function useBudgetStats(data) {
     return map;
   }, [transactions]);
 
+  // Resumen del ciclo: gasto por sobre (este ciclo vs anterior) y quién ha pagado
+  const cycleSummary = useMemo(() => {
+    const prev = previousCycle(cycle.start);
+    const paidBy = {};
+    for (const t of transactions) {
+      if (t.type !== "expense" || !t.paidBy || t.date < cycle.start || t.date >= cycle.nextStart) continue;
+      paidBy[t.paidBy] = (paidBy[t.paidBy] || 0) + (t.amount || 0);
+    }
+    return {
+      current: expensesBetween(transactions, cycle.start, cycle.nextStart),
+      previous: expensesBetween(transactions, prev.start, cycle.start),
+      paidBy
+    };
+  }, [transactions, cycle.start, cycle.nextStart]);
+
+  // Nombres de quienes han pagado algo alguna vez (para elegir rápido en el formulario)
+  const payers = useMemo(() => [...new Set(transactions.map((t) => t.paidBy).filter(Boolean))], [transactions]);
+
   return {
     sources, categories, transactions, recurrents,
-    fund, catById, categoryBalances, lastPayrollBySource,
-    cycle: currentCycle()
+    fund, catById, categoryBalances, lastPayrollBySource, cycleSummary, payers, cycle
   };
 }

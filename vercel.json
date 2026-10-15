@@ -1,6 +1,7 @@
 {
   "crons": [
-    { "path": "/api/cron", "schedule": "5 23 * * *" }
+    { "path": "/api/cron", "schedule": "5 23 * * *" },
+    { "path": "/api/cron?summary=1", "schedule": "0 18 * * *" }
   ],
   "functions": {
     "api/subscribe.js": { "maxDuration": 30 }
