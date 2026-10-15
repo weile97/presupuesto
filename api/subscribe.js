@@ -1,4 +1,28 @@
-import { getRedis, notifySubscribers, SUBS_KEY } from '../lib/store.js';
+import { getRedis, notifySubscribers, SUBS_KEY, PUSH_ERROR_KEY } from '../lib/store.js';
+
+// Clave pública que usa la app (src/lib/push.js). Debe ser igual a VAPID_PUBLIC_KEY de Vercel.
+const APP_PUBLIC_KEY = 'BK4VbfG3I9gIpwvZTVv7oyhZbizLyDtsBqV23D4gc_FqtNtc1zV1CCaCifMpLZtIq-86r6CLJ_eoM-sZ__d1VMM';
+
+// Diagnóstico sin datos sensibles: configuración, nº de móviles suscritos y último error de envío
+async function diagnostics(redis) {
+  const [subs, lastError] = await Promise.all([redis.get(SUBS_KEY), redis.get(PUSH_ERROR_KEY)]);
+  const list = Array.isArray(subs) ? subs : [];
+  let webpushInstalled = true;
+  try { await import('web-push'); } catch { webpushInstalled = false; }
+  return {
+    webpushInstalled,
+    vapidPublicSet: !!process.env.VAPID_PUBLIC_KEY,
+    vapidPrivateSet: !!process.env.VAPID_PRIVATE_KEY,
+    publicKeyMatchesApp: (process.env.VAPID_PUBLIC_KEY || '').trim() === APP_PUBLIC_KEY,
+    vapidSubject: process.env.VAPID_SUBJECT ? 'configurado' : 'por defecto',
+    subscriptions: list.map((s) => ({
+      device: String(s.deviceId).slice(0, 4) + '…',
+      service: (() => { try { return new URL(s.subscription.endpoint).host; } catch { return '?'; } })(),
+      savedAt: s.savedAt ? new Date(s.savedAt).toISOString() : null
+    })),
+    lastError: lastError || null
+  };
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,6 +41,10 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('No se pudo inicializar la conexión con Redis:', err);
       return res.status(500).json({ error: 'No se pudo conectar con la base de datos.' });
+    }
+
+    if (req.method === 'GET') {
+      return res.status(200).json(await diagnostics(redis));
     }
 
     // GUARDAR / ACTUALIZAR SUSCRIPCIÓN DE ESTE DISPOSITIVO
