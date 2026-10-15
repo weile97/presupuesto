@@ -1,7 +1,7 @@
 import { DEVICE_ID } from "./device.js";
 
 // Debe coincidir con la VAPID_PUBLIC_KEY configurada en Vercel
-const VAPID_PUBLIC_KEY = "BK4VbfG3I9gIpwvZTVv7oyhZbizLyDtsBqV23D4gc_FqtNtc1zV1CCaCifMpLZtIq-86r6CLJ_eoM-sZ__d1VMM";
+const VAPID_PUBLIC_KEY = "BOH05ykgs-MQZRuk7mCpNVF7jbYhyix_BKAFoLRSIGxyIZQFM2YU1ttNkjwTgKUoOgcoKeVSEy-9q8PefNe0bpw";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
