@@ -1,5 +1,7 @@
 {
+  "id": "/",
   "name": "M&J Presupuesto",
+  "description": "Presupuesto compartido M&J: nóminas, sobres y movimientos.",
   "short_name": "M&J",
   "start_url": "/",
   "scope": "/",

@@ -1,15 +1,4 @@
-const SUBS_KEY = 'app_finanzas_push_subs';
-
-let redisClient = null;
-async function getRedis() {
-  if (redisClient) return redisClient;
-  const { Redis } = await import('@upstash/redis');
-  redisClient = new Redis({
-    url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-  });
-  return redisClient;
-}
+import { getRedis, notifySubscribers, SUBS_KEY } from '../lib/store.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,7 +24,17 @@ export default async function handler(req, res) {
       try {
         let body = req.body;
         if (typeof body === 'string') body = JSON.parse(body);
-        const { subscription, deviceId } = body || {};
+        const { subscription, deviceId, test } = body || {};
+
+        // Aviso de prueba a este móvil tras 10 s (para bloquear la pantalla y comprobar que llega)
+        if (test && deviceId) {
+          const existing = await redis.get(SUBS_KEY);
+          const registered = (Array.isArray(existing) ? existing : []).some((s) => s.deviceId === deviceId);
+          if (!registered) return res.status(404).json({ error: 'Este móvil no está suscrito. Activa los avisos primero.' });
+          await new Promise((r) => setTimeout(r, 10000));
+          await notifySubscribers(redis, { title: 'M&J 🦄 · Prueba', body: '🔔 Si ves esto con el móvil bloqueado, los avisos funcionan.' }, null, deviceId);
+          return res.status(200).json({ success: true });
+        }
 
         if (!subscription?.endpoint || !deviceId) {
           return res.status(400).json({ error: 'Falta subscription o deviceId' });

@@ -155,7 +155,7 @@ export default function App() {
       {sheet?.type === "transfer" && <TransferForm key={sheet.n} {...formProps} categories={categories} from={sheet.from} />}
       {sheet?.type === "tx" && <TransactionForm key={sheet.n} {...formProps} tx={sheet.tx} preset={sheet.preset} categories={categories} />}
       {sheet?.type === "recurrent" && <RecurrentForm key={sheet.n} {...formProps} categories={categories} />}
-      {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} />}
+      {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} notify={notify} />}
     </div>
   );
 }

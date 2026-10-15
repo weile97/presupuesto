@@ -53,6 +53,17 @@ export function showLocalNotification(title, body) {
     .catch(() => {});
 }
 
+// Pide al servidor un aviso de prueba para este móvil (llega a los 10 s)
+export async function sendTestPush() {
+  const res = await fetch("/api/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ test: true, deviceId: DEVICE_ID })
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+}
+
 export function clearAppBadge() {
   try { navigator.clearAppBadge?.(); } catch { /* no soportado */ }
   navigator.serviceWorker?.controller?.postMessage({ type: "mj-clear-badge" });

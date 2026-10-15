@@ -1,5 +1,8 @@
 {
   "crons": [
     { "path": "/api/cron", "schedule": "5 23 * * *" }
-  ]
+  ],
+  "functions": {
+    "api/subscribe.js": { "maxDuration": 30 }
+  }
 }
