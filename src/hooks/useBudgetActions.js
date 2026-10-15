@@ -113,7 +113,7 @@ export function useBudgetActions({ data, stats, save, notify, celebrate }) {
   function adjustCategory(catId, amountText) {
     const cat = catById.get(catId);
     const amt = parseAmount(amountText);
-    if (!cat) return false;
+    if (!cat || !requirePin(cat, `PIN requerido para ajustar "${cat.name}":`)) return false;
     if (isNaN(amt) || amt === 0) return fail("Introduce una cantidad válida (positiva o negativa).");
     addTxs([{
       id: uid(), concept: `Ajuste manual de saldo: ${cat.name}`, categoryId: catId, sourceId: null,

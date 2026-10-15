@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { X, Lock, Plus, Wallet, Edit2, Eye, EyeOff, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { X, Lock, Plus, Minus, Wallet, Edit2, Eye, EyeOff, Search, ArrowRightLeft, Eraser, Trash2 } from "lucide-react";
+import { AmountInput } from "../../components/ui/Sheet.jsx";
 import { CAT_ICONS } from "../../lib/constants.js";
 import { money, isLightColor, sortByDateDesc } from "../../lib/format.js";
 import TransactionItem from "../transactions/TransactionItem.jsx";
@@ -15,6 +16,12 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
   const color = cat.color || "#151C28";
   const fg = isLightColor(color) ? "#0F172A" : "white";
   const pct = cat.targetGoal > 0 ? Math.min(100, (stats.balance / cat.targetGoal) * 100) : 0;
+
+  const [adjust, setAdjust] = useState("");
+  const applyAdjust = (sign) => {
+    const text = adjust.trim().replace(/^[-+]/, "");
+    if (actions.adjustCategory(cat.id, sign < 0 ? `-${text}` : text)) setAdjust("");
+  };
 
   const openTx = (preset) => { onClose(); openSheet("tx", { preset: { ...preset, categoryId: cat.id } }); };
   const edit = () => {
@@ -67,8 +74,24 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+          {!locked && (
+            <div className="adjust-box">
+              <label>Sumar o quitar dinero al sobre (no toca el Fondo General)</label>
+              <div className="adjust-row">
+                <AmountInput value={adjust} onChange={(e) => setAdjust(e.target.value)} placeholder="Importe" />
+                <button type="button" className="btn-secondary adjust-plus" onClick={() => applyAdjust(1)}><Plus size={15} /> Sumar</button>
+                <button type="button" className="btn-secondary adjust-minus" onClick={() => applyAdjust(-1)}><Minus size={15} /> Quitar</button>
+              </div>
+            </div>
+          )}
+
+          <div className="detail-tools">
             <button className="btn-secondary" onClick={edit}><Edit2 size={14} /> Editar sobre</button>
+            {!locked && (
+              <button className="btn-secondary" onClick={() => { onClose(); openSheet("transfer", { from: cat.id }); }}>
+                <ArrowRightLeft size={14} /> Traspasar
+              </button>
+            )}
             {cat.hasPin && (
               <button className="btn-secondary" onClick={() => actions.toggleUnlock(cat)}>
                 {locked ? <Eye size={14} /> : <EyeOff size={14} />} {locked ? "Desbloquear" : "Bloquear"}
@@ -76,6 +99,12 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
             )}
             <button className="btn-secondary" onClick={() => { onFilterHistory(cat.id); onClose(); }}>
               <Search size={14} /> Ver en el historial
+            </button>
+            <button className="btn-secondary" onClick={() => actions.clearCategory(cat.id)}>
+              <Eraser size={14} /> Vaciar historial
+            </button>
+            <button className="btn-secondary btn-danger" onClick={() => { if (actions.deleteCategory(cat.id)) onClose(); }}>
+              <Trash2 size={14} /> Eliminar sobre
             </button>
           </div>
 

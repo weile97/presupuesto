@@ -200,3 +200,14 @@ input, select { width: 100%; background: #0B0F17; border: 1px solid var(--border
   .toast { left: 12px; right: 12px; max-width: none; }
   .color-grid { grid-template-columns: repeat(8, 1fr); max-width: 100%; }
 }
+.adjust-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.adjust-row input { flex: 1 1 120px; }
+.adjust-row button { flex: 1 1 90px; min-height: 44px; }
+.adjust-plus { color: var(--green); }
+.adjust-minus { color: #FCA5A5; }
+.detail-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 18px; }
+.detail-tools button { min-height: 44px; justify-content: flex-start; }
+.btn-danger { color: #FCA5A5; border-color: rgba(239,68,68,0.35); }
+.drag-handle { touch-action: none; cursor: grab; padding: 8px; margin: -8px 0 -8px -8px; opacity: 0.75; }
+.dragging { opacity: 0.55; transform: scale(0.98); }
+.drag-over { outline: 2px dashed rgba(255,255,255,0.8); outline-offset: 3px; }

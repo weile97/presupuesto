@@ -53,8 +53,8 @@ export function CategoryForm({ category, actions, onClose }) {
   );
 }
 
-export function TransferForm({ categories, actions, onClose }) {
-  const [from, setFrom] = useState("");
+export function TransferForm({ categories, from: initialFrom = "", actions, onClose }) {
+  const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const options = categories.map((c) => <option key={c.id} value={c.id}>{c.name} {c.hasPin ? "🔒" : ""}</option>);
