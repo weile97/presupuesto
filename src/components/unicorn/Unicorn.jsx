@@ -5,7 +5,8 @@ import { useId } from "react";
 const WING = "M98 104 C 84 74, 62 52, 30 44 C 42 56, 38 63, 26 67 C 41 73, 39 81, 30 88 C 48 92, 64 98, 98 113 Z";
 const FEATHERS = "M90 100 C 74 80, 58 66, 40 58 M88 106 C 70 92, 54 82, 38 76";
 
-export default function Unicorn({ size = 160, variant = "loader" }) {
+// witchHat: sombrero de bruja (pantalla de Halloween); el cuerno lo atraviesa
+export default function Unicorn({ size = 160, variant = "loader", witchHat = false }) {
   const id = useId().replace(/:/g, "");
   const g = (name) => `${name}-${id}`;
 
@@ -76,6 +77,15 @@ export default function Unicorn({ size = 160, variant = "loader" }) {
         <ellipse cx="162" cy="77" rx="12" ry="9" fill="#FCE7F3" stroke="#F9A8D4" strokeWidth="1.2" />
         <circle cx="167" cy="78" r="1.3" fill="#DB2777" />
         <path d="M139 54 L142 40 L148 53 Z" fill="#FFFFFF" stroke="#E9D5FF" strokeWidth="1.2" />
+
+        {witchHat && (
+          <g transform="translate(148 51) scale(1.4) translate(-148 -51)"><g className="uni-hat">
+            <path d="M131 52 C 138 44, 141 30, 146 14 C 147 10, 152 9, 151 15 C 150 26, 156 40, 165 50 Z" fill="#3B0764" stroke="#1E0536" strokeWidth="1.2" />
+            <path d="M136 45 C 145 42, 156 42, 161 45 L 163 50 C 154 47, 143 47, 134 50 Z" fill="#F97316" />
+            <ellipse cx="148" cy="51" rx="24" ry="5" fill="#2E1065" stroke="#1E0536" strokeWidth="1.2" />
+            <path d="M150 12 l2 -5 1 5 5 1 -5 2 -1 5 -2 -5 -5 -1z" fill="#FDE68A" />
+          </g></g>
+        )}
 
         {/* Cuerno */}
         <path className="uni-horn" d="M149 52 L161 24 L157 55 Z" fill={`url(#${g("horn")})`} />

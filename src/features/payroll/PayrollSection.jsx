@@ -4,7 +4,7 @@ import { money, fmtDay } from "../../lib/format.js";
 
 export default function PayrollSection({ sources, lastPayrollBySource, openSheet, actions }) {
   return (
-    <section>
+    <section id="nominas" className="anchor">
       <div className="section-header">
         <div>
           <div className="section-title"><CreditCard size={18} color="var(--pink-primary)" /> Ingresos de Nómina</div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus } from "lucide-react";
+
 
 import { useBudgetSync } from "./hooks/useBudgetSync.js";
 import { useBudgetStats } from "./hooks/useBudgetStats.js";
@@ -9,8 +9,11 @@ import { readUserName, writeUserName } from "./lib/device.js";
 
 import Toast from "./components/ui/Toast.jsx";
 import Header from "./components/Header.jsx";
+import BottomNav from "./components/BottomNav.jsx";
 import Summary from "./components/Summary.jsx";
 import UnicornLoader from "./components/unicorn/UnicornLoader.jsx";
+import { isHalloweenSeason, HALLOWEEN_LOADER_MS } from "./lib/season.js";
+import { todayLocal } from "./shared.js";
 import UnicornCelebration from "./components/unicorn/UnicornCelebration.jsx";
 
 import PayrollSection from "./features/payroll/PayrollSection.jsx";
@@ -28,6 +31,8 @@ import PinDialog from "./components/ui/PinDialog.jsx";
 
 // Tiempo mínimo de la pantalla de carga, para que se vea al unicornio desplegar las alas
 const MIN_LOADER_MS = 1400;
+// En Halloween (24 oct - 2 nov) la pantalla de carga temática dura 5 s (se puede saltar tocando)
+const HALLOWEEN = isHalloweenSeason(todayLocal());
 
 export default function App() {
   // --- Avisos -------------------------------------------------------------
@@ -61,7 +66,7 @@ export default function App() {
 
   const [minTimePassed, setMinTimePassed] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setMinTimePassed(true), MIN_LOADER_MS);
+    const t = setTimeout(() => setMinTimePassed(true), HALLOWEEN ? HALLOWEEN_LOADER_MS : MIN_LOADER_MS);
     return () => clearTimeout(t);
   }, []);
 
@@ -86,7 +91,7 @@ export default function App() {
     push.enable();
   }
 
-  if (loading || !minTimePassed) return <UnicornLoader />;
+  if (loading || !minTimePassed) return <UnicornLoader halloween={HALLOWEEN} onSkip={loading ? undefined : () => setMinTimePassed(true)} />;
 
   if (loadError && !data) {
     return (
@@ -108,7 +113,6 @@ export default function App() {
       {celebration && <UnicornCelebration key={celebration.id} message={celebration.message} onDone={endCelebration} />}
 
       <Header
-        cycle={cycle}
         userName={userName}
         showBell={push.permission !== "granted"}
         onEnableNotifications={enableNotifications}
@@ -117,9 +121,14 @@ export default function App() {
       />
 
       <main className="main-content">
-        <Summary fund={fund} cycle={cycle} hasSources={sources.length > 0} onRegisterPayroll={() => openSheet("bulkPayroll")} />
-        <CycleSummary categories={categories} cycleSummary={stats.cycleSummary} isLocked={actions.isLocked} />
-        <PayrollSection sources={sources} lastPayrollBySource={lastPayrollBySource} openSheet={openSheet} actions={actions} />
+        <Summary
+          fund={fund}
+          cycle={cycle}
+          categories={categories}
+          categoryBalances={categoryBalances}
+          hasSources={sources.length > 0}
+          onRegisterPayroll={() => openSheet("bulkPayroll")}
+        />
         <CategoriesSection
           categories={categories}
           categoryBalances={categoryBalances}
@@ -127,6 +136,8 @@ export default function App() {
           openSheet={openSheet}
           onOpenDetail={setDetailId}
         />
+        <CycleSummary categories={categories} cycleSummary={stats.cycleSummary} isLocked={actions.isLocked} />
+        <PayrollSection sources={sources} lastPayrollBySource={lastPayrollBySource} openSheet={openSheet} actions={actions} />
         <RecurrentsSection recurrents={recurrents} transactions={transactions} catById={catById} actions={actions} openSheet={openSheet} />
         <TransactionsSection
           transactions={transactions}
@@ -138,12 +149,12 @@ export default function App() {
         />
       </main>
 
-      {/* Botón flotante: apuntar un gasto en 2 toques */}
-      {!overlayOpen && (
-        <button className="fab" onClick={() => openSheet("tx", { preset: { type: "expense" } })} aria-label="Nuevo gasto">
-          <Plus size={26} />
-        </button>
-      )}
+      {/* Barra inferior con botón central "+" para apuntar un gasto en 2 toques */}
+      <BottomNav
+        hidden={overlayOpen}
+        onAdd={() => openSheet("tx", { preset: { type: "expense" } })}
+        onSettings={() => openSheet("name")}
+      />
 
       {detailCat && (
         <CategoryDetail

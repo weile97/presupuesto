@@ -20,7 +20,7 @@ export default function CycleSummary({ categories, cycleSummary, isLocked }) {
   if (rows.length === 0 && payers.length === 0) return null;
 
   return (
-    <section>
+    <section id="resumen" className="anchor">
       <div className="section-header">
         <button className="section-title section-toggle" onClick={() => setOpen((v) => !v)}>
           <BarChart3 size={18} color="var(--pink-primary)" /> Resumen del ciclo

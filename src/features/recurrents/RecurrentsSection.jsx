@@ -7,7 +7,7 @@ export default function RecurrentsSection({ recurrents, transactions, catById, a
   const month = todayISO().slice(0, 7);
 
   return (
-    <section>
+    <section id="recurrentes" className="anchor">
       <div className="section-header">
         <div>
           <div className="section-title"><Calendar size={18} color="var(--yellow)" /> Recurrentes mensuales</div>

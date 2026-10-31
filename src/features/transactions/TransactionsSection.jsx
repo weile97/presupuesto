@@ -1,7 +1,18 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { TrendingUp, Trash2, Plus, Search, X } from "lucide-react";
 import { TX_PAGE } from "../../lib/constants.js";
-import { sortByDateDesc } from "../../lib/format.js";
+import { sortByDateDesc, todayISO } from "../../lib/format.js";
+
+// Cabecera de cada día del historial: "Hoy", "Ayer" o "lunes, 27 oct"
+function dayLabel(iso) {
+  if (!iso) return "Sin fecha";
+  const today = todayISO();
+  const y = new Date(`${today}T12:00:00`);
+  y.setDate(y.getDate() - 1);
+  if (iso === today) return "Hoy";
+  if (iso === y.toISOString().slice(0, 10)) return "Ayer";
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" });
+}
 import { currentCycle, isExpenseType } from "../../shared.js";
 import TransactionItem from "./TransactionItem.jsx";
 
@@ -34,7 +45,7 @@ export default function TransactionsSection({ transactions, catById, actions, op
   const edit = async (t) => { if (await actions.canEditTx(t)) openSheet("tx", { tx: t }); };
 
   return (
-    <section>
+    <section id="movimientos" className="anchor">
       <div className="section-header">
         <div className="section-title"><TrendingUp size={18} color="var(--green)" /> Historial de movimientos</div>
         <div className="section-actions">
@@ -70,14 +81,16 @@ export default function TransactionsSection({ transactions, catById, actions, op
         {filtered.length === 0 ? (
           <div className="empty-text">No se encontraron movimientos.</div>
         ) : (
-          filtered.slice(0, limit).map((t) => (
-            <TransactionItem
-              key={t.id}
-              tx={t}
-              category={catById.get(t.categoryId)}
-              onEdit={() => edit(t)}
-              onDelete={() => actions.deleteTransaction(t.id)}
-            />
+          filtered.slice(0, limit).map((t, i, arr) => (
+            <Fragment key={t.id}>
+              {(i === 0 || arr[i - 1].date !== t.date) && <div className="day-head">{dayLabel(t.date)}</div>}
+              <TransactionItem
+                tx={t}
+                category={catById.get(t.categoryId)}
+                onEdit={() => edit(t)}
+                onDelete={() => actions.deleteTransaction(t.id)}
+              />
+            </Fragment>
           ))
         )}
         {filtered.length > limit && (

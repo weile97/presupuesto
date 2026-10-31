@@ -7,8 +7,6 @@ export const API_URL = "/api/data";
 export const TX_PAGE = 40;
 export const EMPTY = Object.freeze([]); // referencia estable para no invalidar los useMemo en cada render
 
-// En pantallas táctiles el arrastre HTML5 captura el gesto y bloquea el scroll
-export const CAN_DRAG = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: fine)").matches;
 
 export const CAT_ICONS = {
   paw: PawPrint, food: UtensilsCrossed, alert: AlertTriangle, home: Home,

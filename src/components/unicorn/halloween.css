@@ -1,0 +1,97 @@
+/* ===== Pantalla de carga de Halloween ===== */
+.halloween-loader {
+  position: fixed; inset: 0; z-index: 2000; overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(251, 146, 60, 0.28), transparent 32%),
+    linear-gradient(180deg, #12061F 0%, #2A0E3D 55%, #3B1530 100%);
+  color: #FFF7ED;
+  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+}
+
+/* Estrellas parpadeando */
+.hw-stars {
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 30% 8%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 55% 22%, #fff, transparent), radial-gradient(1px 1px at 68% 40%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 88% 52%, #fff, transparent), radial-gradient(1px 1px at 8% 48%, #fff, transparent),
+    radial-gradient(1px 1px at 42% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 22% 70%, #fff, transparent);
+  animation: hwTwinkle 3s ease-in-out infinite;
+}
+@keyframes hwTwinkle { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+/* Luna llena */
+.hw-moon {
+  position: absolute; top: calc(6% + env(safe-area-inset-top)); right: 8%; width: 110px; height: 110px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #FFF7D6 0%, #FDE68A 45%, #F59E0B 100%);
+  box-shadow: 0 0 60px 20px rgba(253, 186, 116, 0.35);
+  animation: hwMoonIn 1.2s ease-out both;
+}
+.hw-moon::before, .hw-moon::after { content: ""; position: absolute; border-radius: 50%; background: rgba(180, 120, 30, 0.25); }
+.hw-moon::before { width: 18px; height: 18px; left: 26px; top: 50px; }
+.hw-moon::after { width: 11px; height: 11px; left: 62px; top: 30px; }
+@keyframes hwMoonIn { from { transform: translateY(30px) scale(0.8); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Murciélagos volando */
+.hw-bat { position: absolute; width: 64px; height: 32px; filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.35)); }
+.hw-bat path { transform-origin: 32px 14px; animation: hwFlap 0.28s ease-in-out infinite alternate; }
+@keyframes hwFlap { from { transform: scaleY(1); } to { transform: scaleY(0.45); } }
+.hw-bat.b1 { top: 16%; animation: hwFly1 5s linear infinite; }
+.hw-bat.b2 { top: 30%; width: 44px; animation: hwFly2 6.5s linear 0.8s infinite both; }
+.hw-bat.b3 { top: 9%; width: 36px; animation: hwFly1 7s linear 1.6s infinite both; }
+@keyframes hwFly1 {
+  0% { left: -80px; transform: translateY(0); }
+  25% { transform: translateY(-18px); }
+  50% { transform: translateY(12px); }
+  75% { transform: translateY(-10px); }
+  100% { left: calc(100% + 80px); transform: translateY(0); }
+}
+@keyframes hwFly2 {
+  0% { left: calc(100% + 60px); transform: translateY(0) scaleX(-1); }
+  50% { transform: translateY(-24px) scaleX(-1); }
+  100% { left: -80px; transform: translateY(0) scaleX(-1); }
+}
+
+/* Niebla */
+.hw-fog {
+  position: absolute; left: -20%; right: -20%; bottom: 60px; height: 140px;
+  background: radial-gradient(ellipse at center, rgba(216, 180, 254, 0.18), transparent 70%);
+  animation: hwFog 6s ease-in-out infinite alternate;
+}
+@keyframes hwFog { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
+
+/* Unicornio y textos */
+.hw-center { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: -40px; }
+.hw-unicorn-wrap.unicorn-loader { position: static; inset: auto; background: none; padding: 0; display: block; }
+.hw-unicorn-wrap .unicorn { filter: drop-shadow(0 0 18px rgba(251, 146, 60, 0.35)); }
+.uni-hat { animation: hwHat 2.4s ease-in-out infinite; transform-origin: 148px 51px; }
+@keyframes hwHat { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
+.hw-title {
+  font-size: 34px; font-weight: 800; letter-spacing: -0.01em; margin-top: 4px;
+  background: linear-gradient(90deg, #FDBA74, #F97316, #C084FC); -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: 0 0 30px rgba(249, 115, 22, 0.25);
+  animation: hwPop 0.7s cubic-bezier(.2, .9, .3, 1.3) 0.3s both;
+}
+@keyframes hwPop { from { transform: scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.hw-sub { font-size: 14px; font-weight: 600; color: #FED7AA; margin-top: 6px; opacity: 0.9; }
+.hw-progress { width: 200px; height: 6px; border-radius: 3px; margin-top: 18px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.hw-progress div { height: 100%; width: 100%; border-radius: 3px; background: linear-gradient(90deg, #F97316, #C084FC); transform-origin: left; animation: hwLoad 5s linear forwards; }
+@keyframes hwLoad { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.hw-skip { font-size: 11px; color: rgba(255, 237, 213, 0.55); margin-top: 10px; font-weight: 600; }
+
+/* Calabazas en el suelo */
+.hw-ground { position: absolute; left: 0; right: 0; bottom: 0; height: calc(90px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, #12061F 55%); }
+.hw-pumpkin { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.55)); }
+.hw-pumpkin.pk1 { left: 6%; width: 74px; animation: hwBob 2.2s ease-in-out infinite; }
+.hw-pumpkin.pk2 { right: 8%; width: 92px; animation: hwBob 2.6s ease-in-out 0.4s infinite; }
+.hw-pumpkin.pk3 { left: 40%; width: 50px; bottom: calc(6px + env(safe-area-inset-bottom)); animation: hwBob 2s ease-in-out 0.8s infinite; }
+@keyframes hwBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(2deg); } }
+.hw-glow { animation: hwFlicker 1.3s ease-in-out infinite; }
+@keyframes hwFlicker { 0%, 100% { opacity: 1; } 40% { opacity: 0.65; } 60% { opacity: 0.95; } 80% { opacity: 0.7; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .halloween-loader *, .halloween-loader *::before { animation: none !important; }
+  .hw-bat { display: none; }
+}
+.hw-sound { color: #FDBA74; font-size: 13px; animation: fadePulse 1.4s ease-in-out infinite; }

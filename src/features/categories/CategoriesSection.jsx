@@ -64,7 +64,7 @@ export default function CategoriesSection({ categories, categoryBalances, action
   const editCategory = async (cat) => { if (await actions.requirePin(cat, `PIN para editar "${cat.name}"`)) openSheet("category", { category: cat }); };
 
   return (
-    <section>
+    <section id="sobres" className="anchor">
       <div className="section-header">
         <div className="section-title">
           {viewMode === "stack" ? <Layers size={18} color="var(--purple-accent)" /> : <PieChart size={18} color="var(--purple-accent)" />}

@@ -1,12 +1,13 @@
 import { memo } from "react";
-import { Edit2, Trash2, Wallet, Banknote } from "lucide-react";
+import { Trash2, Wallet, Banknote, ChevronRight } from "lucide-react";
 import { CAT_ICONS } from "../../lib/constants.js";
 import { money, fmtDay } from "../../lib/format.js";
 import { isExpenseType } from "../../shared.js";
 
 const isAdjustment = (type) => type === "adjustment_income" || type === "adjustment_expense";
 
-// Una fila del historial. `compact` = versión de la ventana de un sobre (sin icono ni nombre del sobre).
+// Una fila del historial: tocarla abre la edición; la papelera la borra (con "Deshacer").
+// `compact` = versión de la ventana de un sobre (sin icono ni nombre del sobre).
 function TransactionItem({ tx: t, category: cat, compact, onEdit, onDelete }) {
   const negative = isExpenseType(t.type) || (t.type === "carryover" && t.amount < 0);
   const tags = (
@@ -15,38 +16,22 @@ function TransactionItem({ tx: t, category: cat, compact, onEdit, onDelete }) {
       {isAdjustment(t.type) && <span className="adjust-tag">Ajuste</span>}
     </>
   );
-  const amount = <div className={`tx-amount ${negative ? "expense" : "income"}`}>{negative ? "-" : "+"}{money(Math.abs(t.amount))}</div>;
-  const buttons = (
-    <>
-      <button className="btn-icon" onClick={onEdit} aria-label="Editar movimiento"><Edit2 size={15} /></button>
-      <button className="btn-icon" onClick={onDelete} aria-label="Eliminar movimiento"><Trash2 size={15} style={{ color: "var(--red)" }} /></button>
-    </>
-  );
-
-  if (compact) {
-    return (
-      <div className="modal-tx-item">
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 13 }}>{t.concept}{tags}</div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{fmtDay(t.date)}</div>
-        </div>
-        <div className="tx-right">{amount}{buttons}</div>
-      </div>
-    );
-  }
+  const remove = (e) => { e.stopPropagation(); onDelete(); };
+  const meta = [compact ? fmtDay(t.date) : cat ? cat.name : "Fondo General", t.paidBy && `pagó ${t.paidBy}`].filter(Boolean).join(" · ");
 
   const Icon = cat ? CAT_ICONS[cat.icon] || Wallet : t.type === "payroll_income" ? Banknote : Wallet;
-  const badgeColor = cat?.color || (t.type === "payroll_income" ? "#059669" : "#1E293B");
+  const badgeColor = cat?.color || (t.type === "payroll_income" ? "#059669" : "#334155");
+
   return (
-    <div className="tx-item">
-      <div className="tx-left">
-        <div className="tx-badge" style={{ backgroundColor: badgeColor }}><Icon size={20} /></div>
-        <div style={{ minWidth: 0 }}>
-          <div className="tx-title">{t.concept}{tags}</div>
-          <div className="tx-sub">{cat ? cat.name : "Fondo General"} • {fmtDay(t.date)}</div>
-        </div>
+    <div className={compact ? "tx-item compact" : "tx-item"} role="button" tabIndex={0} onClick={onEdit} onKeyDown={(e) => e.key === "Enter" && onEdit()}>
+      {!compact && <div className="tx-badge" style={{ backgroundColor: badgeColor }}><Icon size={19} /></div>}
+      <div className="tx-main">
+        <div className="tx-title">{t.concept}{tags}</div>
+        <div className="tx-sub">{meta}</div>
       </div>
-      <div className="tx-right">{amount}{buttons}</div>
+      <div className={`tx-amount ${negative ? "expense" : "income"}`}>{negative ? "−" : "+"}{money(Math.abs(t.amount))}</div>
+      <button className="tx-delete" onClick={remove} aria-label="Eliminar movimiento"><Trash2 size={16} /></button>
+      <ChevronRight size={16} className="tx-chevron" />
     </div>
   );
 }

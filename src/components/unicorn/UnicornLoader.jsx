@@ -1,8 +1,10 @@
 import Unicorn from "./Unicorn.jsx";
+import HalloweenLoader from "./HalloweenLoader.jsx";
 import "./unicorn.css";
 
 // Pantalla de carga: el unicornio despliega las alas y luego aletea mientras cargan los datos
-export default function UnicornLoader({ text = "Cargando vuestro presupuesto…" }) {
+export default function UnicornLoader({ text = "Cargando vuestro presupuesto…", halloween = false, onSkip }) {
+  if (halloween) return <HalloweenLoader text={text} onSkip={onSkip} />;
   return (
     <div className="unicorn-loader" role="status" aria-live="polite">
       <Unicorn size={180} variant="loader" />
