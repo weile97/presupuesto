@@ -26,8 +26,11 @@ import TransactionForm from "./features/transactions/TransactionForm.jsx";
 import RecurrentsSection, { RecurrentForm } from "./features/recurrents/RecurrentsSection.jsx";
 import NameForm from "./features/settings/NameForm.jsx";
 import BackupsForm from "./features/settings/BackupsForm.jsx";
+import WhatsNew from "./features/settings/WhatsNew.jsx";
+import { hasUnseenUpdate, markUpdateSeen } from "./lib/changelog.js";
 import CycleSummary from "./features/summary/CycleSummary.jsx";
 import PinDialog from "./components/ui/PinDialog.jsx";
+import ConfirmDialog from "./components/ui/ConfirmDialog.jsx";
 
 // Tiempo mínimo de la pantalla de carga, para que se vea al unicornio desplegar las alas
 const MIN_LOADER_MS = 1400;
@@ -53,8 +56,13 @@ export default function App() {
   const [pinRequest, setPinRequest] = useState(null);
   const askPin = useCallback((title) => new Promise((resolve) => setPinRequest({ title, resolve, id: Date.now() })), []);
   const answerPin = (pin) => { pinRequest?.resolve(pin); setPinRequest(null); };
+
+  // Confirmación: askConfirm({ title, message, confirmLabel }) devuelve una promesa con true o false
+  const [confirmRequest, setConfirmRequest] = useState(null);
+  const askConfirm = useCallback((options) => new Promise((resolve) => setConfirmRequest({ ...options, resolve, id: Date.now() })), []);
+  const answerConfirm = (ok) => { confirmRequest?.resolve(ok); setConfirmRequest(null); };
   const stats = useBudgetStats(data);
-  const actions = useBudgetActions({ data, stats, save, getData, notify, celebrate, askPin, userName });
+  const actions = useBudgetActions({ data, stats, save, getData, notify, celebrate, askPin, askConfirm, userName });
   const push = usePushNotifications(notify);
 
   // --- Navegación: una hoja (formulario) y/o el detalle de un sobre ---------------
@@ -71,7 +79,11 @@ export default function App() {
   }, []);
 
   // Bloquea el scroll de la página mientras hay una hoja o ventana abierta
-  const overlayOpen = !!sheet || !!detailId;
+  // Novedades: salen una vez tras cada actualización (también se pueden volver a ver desde Ajustes)
+  const [showNews, setShowNews] = useState(hasUnseenUpdate);
+  const closeNews = () => { markUpdateSeen(); setShowNews(false); };
+
+  const overlayOpen = !!sheet || !!detailId || showNews;
   useEffect(() => {
     document.body.style.overflow = overlayOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
@@ -175,9 +187,11 @@ export default function App() {
       {sheet?.type === "transfer" && <TransferForm key={sheet.n} {...formProps} categories={categories} from={sheet.from} />}
       {sheet?.type === "tx" && <TransactionForm key={sheet.n} {...formProps} tx={sheet.tx} preset={sheet.preset} categories={categories} payers={stats.payers} />}
       {sheet?.type === "recurrent" && <RecurrentForm key={sheet.n} {...formProps} categories={categories} />}
-      {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} notify={notify} onOpenBackups={() => openSheet("backups")} />}
+      {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} notify={notify} onOpenBackups={() => openSheet("backups")} onOpenNews={() => { closeSheet(); setShowNews(true); }} />}
       {sheet?.type === "backups" && <BackupsForm key={sheet.n} userName={userName} notify={notify} onRestored={refresh} onClose={closeSheet} />}
+      {showNews && <WhatsNew onClose={closeNews} />}
       {pinRequest && <PinDialog key={pinRequest.id} title={pinRequest.title} onDone={answerPin} />}
+      {confirmRequest && <ConfirmDialog key={confirmRequest.id} title={confirmRequest.title} message={confirmRequest.message} confirmLabel={confirmRequest.confirmLabel} onDone={answerConfirm} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { uid, todayISO, money, parseAmount, nextMonthKey } from "../lib/format.js";
 import { hashPin, pinMatches, isSecureHash, migrateCategoryPins } from "../lib/pin.js";
-import { isAllocation } from "../shared.js";
+import { isAllocation, isRecurrentApplied, findDuplicateTx, findDuplicateRule, normalizeText } from "../shared.js";
 
 // --- Deshacer: funciones que devuelven el estado con el cambio revertido -------------------
 const withIndex = (arr, pred) => arr.map((item, index) => ({ item, index })).filter(({ item }) => pred(item));
@@ -19,12 +19,16 @@ const compose = (...fns) => (cur) => fns.reduce((acc, fn) => fn(acc), cur);
  * Todas las operaciones que modifican el presupuesto. Cada una valida, guarda y avisa.
  * Las que vienen de un formulario devuelven (una promesa de) true si se ha guardado, para cerrarlo.
  */
-export function useBudgetActions({ data, stats, save, getData, notify, celebrate, askPin, userName }) {
+export function useBudgetActions({ data, stats, save, getData, notify, celebrate, askPin, askConfirm, userName }) {
   const { sources, categories, transactions, recurrents, fund, catById, categoryBalances } = stats;
 
   // Aviso con botón "Deshacer": aplica la reversión sobre los datos ACTUALES (por si la pareja cambió algo)
   const undoable = (message, revert) =>
     notify(message, "success", { label: "Deshacer", onClick: () => { save(revert(getData())); notify("Cambio deshecho."); } });
+
+  // Un duplicado solo se guarda si el usuario lo confirma expresamente
+  const confirmDuplicate = (message) =>
+    askConfirm({ title: "Posible duplicado", message, confirmLabel: "Añadir igualmente" });
 
   // --- Sobres con PIN: se desbloquean 60 s ---------------------------------
   const [unlockedCats, setUnlockedCats] = useState({});
@@ -82,31 +86,39 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     type: "payroll_income", amount, date: todayISO()
   });
 
-  function depositPayroll(src, amountText) {
+  const payrollExists = (src, amt) =>
+    getData().transactions.some((t) => t.type === "payroll_income" && t.sourceId === src.id && t.amount === amt);
+
+  async function depositPayroll(src, amountText) {
     const amt = parseAmount(amountText);
     if (isNaN(amt) || amt <= 0) return fail("Introduce un importe de nómina válido.");
+    if (payrollExists(src, amt) && !(await confirmDuplicate(`Ya hay una nómina de ${money(amt)} de "${src.name}" en este ciclo. ¿Añadirla otra vez?`))) return false;
     const tx = payrollTx(src, amt);
     addTxs([tx]);
     undoable(`Se han añadido ${money(amt)} al Fondo General.`, removeIds("transactions", [tx.id]));
     return true;
   }
 
-  function bulkPayroll(amounts) {
+  async function bulkPayroll(amounts) {
     const newTxs = sources
       .map((src) => ({ src, amt: parseAmount(amounts[src.id]) }))
       .filter(({ amt }) => !isNaN(amt) && amt > 0)
       .map(({ src, amt }) => payrollTx(src, amt));
     if (newTxs.length === 0) return fail("Introduce al menos un importe válido.");
-    addTxs(newTxs);
+    const repeated = sources.filter((s) => newTxs.some((t) => t.sourceId === s.id && payrollExists(s, t.amount)));
+    if (repeated.length > 0 && !(await confirmDuplicate(`Ya están registradas en este ciclo estas nóminas con el mismo importe: ${repeated.map((s) => s.name).join(", ")}. ¿Añadirlas otra vez?`))) return false;
+    save({ ...getData(), transactions: [...newTxs, ...getData().transactions] });
     celebrate("¡Nóminas registradas!");
     undoable(`Se han añadido ${money(newTxs.reduce((a, t) => a + t.amount, 0))} al Fondo General.`, removeIds("transactions", newTxs.map((t) => t.id)));
     return true;
   }
 
-  function saveSource({ id, name, amount, icon, color }) {
+  async function saveSource({ id, name, amount, icon, color }) {
     const n = name.trim();
     const amt = parseAmount(amount);
     if (!n || isNaN(amt) || amt < 0) return fail("Introduce un nombre e importe de referencia válidos.");
+    if (sources.some((s) => s.id !== id && normalizeText(s.name) === normalizeText(n)) &&
+      !(await confirmDuplicate(`Ya existe una fuente de nómina llamada "${n}". ¿Guardarla igualmente?`))) return false;
     const fields = { name: n, amount: amt, icon, color };
     save({
       ...data,
@@ -126,6 +138,8 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
   async function saveCategory({ id, name, icon, color, hasPin, pin, goal }) {
     const n = name.trim();
     if (!n) return fail("Pon un nombre al sobre.");
+    if (categories.some((c) => c.id !== id && normalizeText(c.name) === normalizeText(n)) &&
+      !(await confirmDuplicate(`Ya existe un sobre llamado "${n}". ¿Guardarlo igualmente?`))) return false;
     const existing = id ? catById.get(id) : null;
     const newId = id || uid();
     let pinHash = "";
@@ -156,6 +170,8 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
       id: uid(), concept: `Ajuste manual de saldo: ${cat.name}`, categoryId: catId, sourceId: null,
       type: amt > 0 ? "adjustment_income" : "adjustment_expense", amount: Math.abs(amt), date: todayISO()
     };
+    if (findDuplicateTx(tx, getData().transactions) &&
+      !(await confirmDuplicate(`Ya has hecho hoy este mismo ajuste de ${money(Math.abs(amt))} en "${cat.name}". ¿Hacerlo otra vez?`))) return false;
     save({ ...getData(), transactions: [tx, ...getData().transactions] });
     undoable(`"${cat.name}" ${amt > 0 ? "+" : ""}${money(amt)}. No afecta al Fondo General.`, removeIds("transactions", [tx.id]));
     return true;
@@ -221,6 +237,8 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
       { id: uid(), concept: `Traspaso ➔ ${toCat.name}`, categoryId: from, sourceId: null, type: "transfer_expense", amount: amt, date },
       { id: uid(), concept: `Traspaso desde ${fromCat.name}`, categoryId: to, sourceId: null, type: "transfer_income", amount: amt, date }
     ];
+    if (findDuplicateTx(txs[0], getData().transactions) &&
+      !(await confirmDuplicate(`Hoy ya hay un traspaso de ${money(amt)} de "${fromCat.name}" a "${toCat.name}". ¿Hacerlo otra vez?`))) return false;
     save({ ...getData(), transactions: [...txs, ...getData().transactions] });
     undoable(`Traspaso de ${money(amt)} completado.`, removeIds("transactions", txs.map((t) => t.id)));
     return true;
@@ -244,13 +262,16 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     }
 
     const fields = { concept: concept.trim(), categoryId, type, amount: amt, date: date || todayISO(), paidBy: type === "expense" ? paidBy || null : null };
+    const dup = findDuplicateTx(fields, cur.transactions, cur.recurrents, id);
+    if (dup && !(await confirmDuplicate(`Ya existe "${dup.concept}" de ${money(dup.amount)} en "${cat?.name}" con fecha ${dup.date}${dup.recurrentId ? " (recurrente)" : ""}. ¿Añadirlo igualmente?`))) return false;
+    const latest = getData(); // puede haber cambiado mientras se confirmaba
     if (id) {
-      const old = cur.transactions.find((t) => t.id === id);
-      save({ ...cur, transactions: cur.transactions.map((t) => (t.id === id ? { ...t, ...fields } : t)) });
+      const old = latest.transactions.find((t) => t.id === id);
+      save({ ...latest, transactions: latest.transactions.map((t) => (t.id === id ? { ...t, ...fields } : t)) });
       if (old) undoable("Movimiento actualizado.", restoreItem("transactions", old));
     } else {
       const tx = { id: uid(), sourceId: null, ...fields };
-      save({ ...cur, transactions: [tx, ...cur.transactions] });
+      save({ ...latest, transactions: [tx, ...latest.transactions] });
       if (type === "income") celebrate(`¡${money(amt)} al sobre ${cat?.name || ""}!`);
       undoable(type === "income" ? "Dinero asignado al sobre." : `Gasto de ${money(amt)} apuntado.`, removeIds("transactions", [tx.id]));
     }
@@ -267,12 +288,14 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
   }
 
   // --- Recurrentes -----------------------------------------------------------------
-  function addRecurrent({ concept, categoryId, type, amount, day }) {
+  async function addRecurrent({ concept, categoryId, type, amount, day }) {
     const amt = parseAmount(amount);
     const d = parseInt(day, 10);
     if (!concept.trim() || isNaN(amt) || amt <= 0 || !categoryId || isNaN(d) || d < 1 || d > 31) {
       return fail("Introduce datos válidos para la regla recurrente.");
     }
+    if (findDuplicateRule({ concept, categoryId, type, amount: amt, day: d }, recurrents) &&
+      !(await confirmDuplicate(`Ya existe una regla "${concept.trim()}" de ${money(amt)} el día ${d} en ese sobre. Si guardas otra igual solo se cobrará una vez al mes. ¿Guardarla igualmente?`))) return false;
     const today = todayISO();
     // Si el día de este mes ya pasó, empieza a aplicarse el mes que viene
     const startMonth = d >= Number(today.slice(8, 10)) ? today.slice(0, 7) : nextMonthKey(today);
@@ -290,13 +313,16 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
   function applyRecurrentsNow() {
     if (recurrents.length === 0) return notify("No hay reglas recurrentes configuradas.", "error");
     const month = todayISO().slice(0, 7);
-    const newTxs = recurrents
-      .filter((rec) => !transactions.some((t) => t.recurrentId === rec.id && (t.date || "").startsWith(month)))
-      .map((rec) => ({
-        // Mismo id que usa la automatización: nunca se aplica dos veces el mismo mes
+    const newTxs = [];
+    for (const rec of recurrents) {
+      // Se salta si ya se pasó este mes: por la automatización, a mano o por otra regla igual
+      if (isRecurrentApplied(rec, [...transactions, ...newTxs], month)) continue;
+      // Mismo id que usa la automatización: nunca se aplica dos veces el mismo mes
+      newTxs.push({
         id: `rec-${rec.id}-${month}`, recurrentId: rec.id, concept: rec.concept, categoryId: rec.categoryId,
         sourceId: null, type: rec.type, amount: rec.amount, date: `${month}-${String(rec.day).padStart(2, "0")}`
-      }));
+      });
+    }
     if (newTxs.length === 0) return notify("Los recurrentes de este mes ya están aplicados.", "error");
     addTxs(newTxs);
     undoable(`Se aplicaron ${newTxs.length} movimientos recurrentes.`, removeIds("transactions", newTxs.map((t) => t.id)));

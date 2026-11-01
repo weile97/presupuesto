@@ -12,7 +12,7 @@ export function SourceForm({ source, actions, onClose }) {
   const [icon, setIcon] = useState(source?.icon || "banknote");
   const [color, setColor] = useState(source?.color || PRESET_COLORS[0]);
 
-  const submit = () => actions.saveSource({ id: source?.id, name, amount, icon, color }) && onClose();
+  const submit = async () => (await actions.saveSource({ id: source?.id, name, amount, icon, color })) && onClose();
 
   return (
     <Sheet title={source ? "Editar fuente de nómina" : "Nueva fuente de nómina"} onClose={onClose} onSubmit={submit}>
@@ -32,7 +32,7 @@ export function SourceForm({ source, actions, onClose }) {
 
 export function DepositForm({ source, actions, onClose }) {
   const [amount, setAmount] = useState(amountText(source.amount));
-  const submit = () => actions.depositPayroll(source, amount) && onClose();
+  const submit = async () => (await actions.depositPayroll(source, amount)) && onClose();
 
   return (
     <Sheet
@@ -51,7 +51,7 @@ export function DepositForm({ source, actions, onClose }) {
 
 export function BulkPayrollForm({ sources, actions, onClose }) {
   const [amounts, setAmounts] = useState(() => Object.fromEntries(sources.map((s) => [s.id, amountText(s.amount)])));
-  const submit = () => actions.bulkPayroll(amounts) && onClose();
+  const submit = async () => (await actions.bulkPayroll(amounts)) && onClose();
 
   return (
     <Sheet

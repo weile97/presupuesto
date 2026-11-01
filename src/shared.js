@@ -61,6 +61,47 @@ export function expensesBetween(transactions = [], from, to) {
   return map;
 }
 
+// --- Duplicados ---------------------------------------------------------
+// Texto comparable: sin mayúsculas, acentos, espacios sobrantes ni el prefijo antiguo "[Recorrente]"
+export const normalizeText = (s) => String(s ?? '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/^\s*\[recorrente\]\s*/i, '')
+  .trim().replace(/\s+/g, ' ').toLowerCase();
+
+// Dos movimientos (o regla y movimiento) son "el mismo" si coinciden concepto, sobre, tipo e importe
+const fingerprint = (x) =>
+  [normalizeText(x.concept), x.categoryId || '', x.type, Math.round((Number(x.amount) || 0) * 100)].join('|');
+
+// Un pago igual cuenta como el de la regla si está a ±14 días de su fecha de cobro. Comparar por mes
+// fallaría: un ingreso a mano el día 1 no es el de la regla del día 29 de ese mismo mes.
+const NEAR_DAYS = 14;
+const dayNumber = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86400000;
+const isNear = (a, b) => !!a && !!b && Math.abs(dayNumber(a) - dayNumber(b)) <= NEAR_DAYS;
+
+// ¿Esta regla ya está pagada este mes, por sí misma, por otra regla igual o a mano?
+export function isRecurrentApplied(rec, transactions = [], month) {
+  const fp = fingerprint(rec);
+  const [y, m] = month.split('-').map(Number);
+  const due = `${month}-${pad(Math.min(Number(rec.day) || 1, daysIn(y, m)))}`;
+  return transactions.some((t) =>
+    (t.recurrentId === rec.id && (t.date || '').startsWith(month)) || (fingerprint(t) === fp && isNear(t.date, due)));
+}
+
+// Movimiento ya existente igual a `candidate`: el mismo día o, si corresponde a un recurrente, a ±14 días
+export function findDuplicateTx(candidate, transactions = [], recurrents = [], ignoreId = null) {
+  const fp = fingerprint(candidate);
+  const isRuleCharge = recurrents.some((r) => fingerprint(r) === fp);
+  return transactions.find((t) => {
+    if (t.id === ignoreId || fingerprint(t) !== fp) return false;
+    if (t.date === candidate.date) return true;
+    return (isRuleCharge || !!t.recurrentId) && isNear(t.date, candidate.date);
+  }) || null;
+}
+
+// Regla igual a otra ya creada (mismo día del mes y mismos datos)
+export const findDuplicateRule = (rule, recurrents = []) =>
+  recurrents.find((r) => fingerprint(r) === fingerprint(rule) && Number(r.day) === Number(rule.day)) || null;
+
 export const isAllocation = (t) => t.type === 'income' && !!t.categoryId;
 export const isFundIncome = (t) => t.type === 'payroll_income' || t.type === 'carryover';
 export const isExpenseType = (type) => type === 'expense' || type === 'transfer_expense' || type === 'adjustment_expense';
@@ -135,7 +176,8 @@ function applyRecurrents(data, today) {
     const day = Math.min(Number(rec.day) || 1, daysIn(y, m));
     if (d < day) continue;
     const id = `rec-${rec.id}-${month}`;
-    if (txs.some((t) => t.id === id || (t.recurrentId === rec.id && (t.date || '').startsWith(month)))) continue;
+    // No se cobra si ya se pasó a mano este mes o si otra regla igual ya lo hizo
+    if (txs.some((t) => t.id === id) || isRecurrentApplied(rec, [...txs, ...added], month)) continue;
     added.push({
       id, recurrentId: rec.id, concept: rec.concept, categoryId: rec.categoryId, sourceId: null,
       type: rec.type, amount: rec.amount, date: `${month}-${pad(day)}`

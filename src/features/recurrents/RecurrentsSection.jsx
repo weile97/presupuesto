@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Calendar, RefreshCw, Plus, X } from "lucide-react";
 import Sheet, { Field, AmountInput } from "../../components/ui/Sheet.jsx";
 import { money, todayISO } from "../../lib/format.js";
+import { isRecurrentApplied } from "../../shared.js";
 
 export default function RecurrentsSection({ recurrents, transactions, catById, actions, openSheet }) {
   const month = todayISO().slice(0, 7);
@@ -23,7 +24,7 @@ export default function RecurrentsSection({ recurrents, transactions, catById, a
         <div className="grid-3" style={{ marginBottom: 32 }}>
           {recurrents.map((r) => {
             const cat = catById.get(r.categoryId);
-            const applied = transactions.some((t) => t.recurrentId === r.id && (t.date || "").startsWith(month));
+            const applied = isRecurrentApplied(r, transactions, month);
             return (
               <div className="card" key={r.id} style={{ padding: 16 }}>
                 <div className="card-top" style={{ marginBottom: 8 }}>
@@ -57,7 +58,7 @@ export function RecurrentForm({ categories, actions, onClose }) {
   const [amount, setAmount] = useState("");
   const [day, setDay] = useState("1");
 
-  const submit = () => actions.addRecurrent({ concept, categoryId, type, amount, day }) && onClose();
+  const submit = async () => (await actions.addRecurrent({ concept, categoryId, type, amount, day })) && onClose();
 
   return (
     <Sheet title="Nueva regla recurrente" onClose={onClose} onSubmit={submit}>

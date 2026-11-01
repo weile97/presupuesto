@@ -396,3 +396,13 @@ input.chip-input { width: 120px; min-height: 40px; padding: 6px 14px; border-rad
   .color-swatch:hover { transform: scale(1.1); }
   .nav-item:hover { color: var(--text); }
 }
+
+/* ---------- Confirmación ---------- */
+.confirm-icon { background: rgba(251, 191, 36, 0.15); color: var(--yellow); }
+.confirm-message { font-size: 14px; color: var(--muted); margin: -6px 0 0; line-height: 1.45; }
+.confirm-actions > button { white-space: normal; }
+
+/* ---------- Novedades ---------- */
+.news-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.news-details { font-size: 13px; font-weight: 500; color: var(--muted); gap: 8px; }
+.news-heading { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 8px; }
