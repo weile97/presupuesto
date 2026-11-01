@@ -3,6 +3,12 @@
 // highlights = lo que se ve al abrir; details = lo que aparece al pulsar "Mostrar más".
 export const CHANGELOG = [
   {
+    version: "2026-11-05",
+    title: "¡Ya es Navidad!",
+    highlights: ["🎄 La pantalla de carga navideña con música ya está activa, hasta el 6 de enero."],
+    details: []
+  },
+  {
     version: "2026-11-04",
     title: "Ya huele a Navidad",
     highlights: [
