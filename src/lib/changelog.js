@@ -3,6 +3,18 @@
 // highlights = lo que se ve al abrir; details = lo que aparece al pulsar "Mostrar más".
 export const CHANGELOG = [
   {
+    version: "2026-11-04",
+    title: "Ya huele a Navidad",
+    highlights: [
+      "🎄 Del 1 de diciembre al 6 de enero, pantalla de carga navideña con música.",
+      "🎃 Corregido: la pantalla de Halloween ya no sale fuera de sus fechas."
+    ],
+    details: [
+      "Unicornio con gorro de Papá Noel, nieve, luces, árboles, regalos y Jingle Bells.",
+      "Si el móvil bloquea el sonido, toca la pantalla para activar la música."
+    ]
+  },
+  {
     version: "2026-11-03",
     title: "Más seguridad y menos trabajo",
     highlights: [

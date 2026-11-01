@@ -1,0 +1,61 @@
+/* ===== Pantalla de carga de Navidad ===== */
+.christmas-loader {
+  position: fixed; inset: 0; z-index: 2000; overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 38%, #1E3A6E 0%, #0F1D3F 50%, #070E22 100%);
+  color: #F8FAFC;
+  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+}
+
+/* Guirnalda de luces */
+.xm-lights {
+  position: absolute; left: 0; right: 0; top: calc(14px + env(safe-area-inset-top));
+  display: flex; justify-content: space-around; padding: 0 8px;
+}
+.xm-lights span { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 12px 2px currentColor; animation: xmBlink 1.4s ease-in-out infinite; }
+.xm-lights span:nth-child(even) { margin-top: 12px; }
+@keyframes xmBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* Nieve */
+.xm-snow { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.xm-snow span { position: absolute; top: -12px; border-radius: 50%; background: #fff; opacity: 0.85; animation: xmFall linear infinite; }
+@keyframes xmFall {
+  0% { transform: translate(0, -12px); }
+  50% { transform: translate(14px, 50vh); }
+  100% { transform: translate(-6px, 102vh); }
+}
+
+/* Unicornio y textos */
+.xm-center { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: -50px; }
+.xm-unicorn-wrap.unicorn-loader { position: static; inset: auto; background: none; padding: 0; display: block; }
+.xm-unicorn-wrap .unicorn { filter: drop-shadow(0 0 18px rgba(147, 197, 253, 0.35)); }
+.uni-santa { animation: xmHat 2.4s ease-in-out infinite; transform-origin: 148px 51px; }
+@keyframes xmHat { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
+.xm-title {
+  font-size: 36px; font-weight: 800; letter-spacing: -0.01em; margin-top: 4px;
+  background: linear-gradient(90deg, #F87171, #FDE68A, #4ADE80); -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: xmPop 0.7s cubic-bezier(.2, .9, .3, 1.3) 0.3s both;
+}
+@keyframes xmPop { from { transform: scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.xm-sub { font-size: 14px; font-weight: 600; color: #DBEAFE; margin-top: 6px; }
+.xm-progress { width: 200px; height: 6px; border-radius: 3px; margin-top: 18px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.xm-progress div { height: 100%; width: 100%; border-radius: 3px; background: linear-gradient(90deg, #EF4444, #FDE68A, #22C55E); transform-origin: left; animation: xmLoad 5s linear forwards; }
+@keyframes xmLoad { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.xm-skip { font-size: 11px; color: rgba(219, 234, 254, 0.6); margin-top: 10px; font-weight: 600; }
+.xm-sound { color: #FDE68A; font-size: 13px; animation: fadePulse 1.4s ease-in-out infinite; }
+
+/* Suelo nevado con árboles y regalos */
+.xm-ground { position: absolute; left: 0; right: 0; bottom: 0; height: calc(70px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, #E2E8F0, #CBD5E1); border-radius: 50% 50% 0 0 / 26px 26px 0 0; z-index: 1; }
+.xm-tree { position: absolute; bottom: calc(40px + env(safe-area-inset-bottom)); }
+.xm-tree.t1 { left: 4%; width: 92px; }
+.xm-tree.t2 { right: 5%; width: 72px; }
+.xm-gift { position: absolute; bottom: calc(22px + env(safe-area-inset-bottom)); }
+.xm-gift.g1 { left: 34%; width: 46px; animation: xmBob 2.2s ease-in-out infinite; }
+.xm-gift.g2 { left: 52%; width: 36px; animation: xmBob 2.6s ease-in-out 0.4s infinite; }
+@keyframes xmBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-4px) rotate(2deg); } }
+.xm-glow { animation: xmBlink 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .christmas-loader *, .christmas-loader *::before { animation: none !important; }
+  .xm-snow { display: none; }
+}

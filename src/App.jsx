@@ -12,7 +12,7 @@ import Header from "./components/Header.jsx";
 import BottomNav from "./components/BottomNav.jsx";
 import Summary from "./components/Summary.jsx";
 import UnicornLoader from "./components/unicorn/UnicornLoader.jsx";
-import { isHalloweenSeason, HALLOWEEN_LOADER_MS } from "./lib/season.js";
+import { currentSeason, SEASON_LOADER_MS } from "./lib/season.js";
 import { todayLocal } from "./shared.js";
 import UnicornCelebration from "./components/unicorn/UnicornCelebration.jsx";
 
@@ -37,8 +37,10 @@ import ConfirmDialog from "./components/ui/ConfirmDialog.jsx";
 
 // Tiempo mínimo de la pantalla de carga, para que se vea al unicornio desplegar las alas
 const MIN_LOADER_MS = 1400;
-// En Halloween (24 oct - 2 nov) la pantalla de carga temática dura 5 s (se puede saltar tocando)
-const HALLOWEEN = isHalloweenSeason(todayLocal());
+// En temporada (Halloween, Navidad) la pantalla de carga temática dura 5 s (se puede saltar tocando).
+// En desarrollo, ?season=christmas o ?season=halloween la fuerza para probarla.
+const devSeason = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("season") : null;
+const SEASON = devSeason || currentSeason(todayLocal());
 
 export default function App() {
   // --- Avisos -------------------------------------------------------------
@@ -85,7 +87,7 @@ export default function App() {
 
   const [minTimePassed, setMinTimePassed] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setMinTimePassed(true), HALLOWEEN ? HALLOWEEN_LOADER_MS : MIN_LOADER_MS);
+    const t = setTimeout(() => setMinTimePassed(true), SEASON ? SEASON_LOADER_MS : MIN_LOADER_MS);
     return () => clearTimeout(t);
   }, []);
 
@@ -116,7 +118,7 @@ export default function App() {
 
   if (authRequired) return <PinGate />;
 
-  if (loading || !minTimePassed) return <UnicornLoader halloween={HALLOWEEN} onSkip={loading ? undefined : () => setMinTimePassed(true)} />;
+  if (loading || !minTimePassed) return <UnicornLoader season={SEASON} onSkip={loading ? undefined : () => setMinTimePassed(true)} />;
 
   if (loadError && !data) {
     return (

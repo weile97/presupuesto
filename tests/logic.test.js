@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { currentCycle, previousCycle, runAutomations, computeFund, categoryBalances, describeChanges, cycleEndSummary, findDuplicateTx, findDuplicateRule } from '../src/shared.js';
 import { mergeData } from '../src/lib/merge.js';
+import { currentSeason } from '../src/lib/season.js';
 import { hashPin, stripPins, applyPins } from '../lib/pins.js';
 
 const base = () => ({
@@ -113,4 +114,15 @@ test('PIN de sobres: los hash no salen hacia la app y no se pierden al guardar',
   // Formatos antiguos: PIN en claro y base64
   assert.equal(applyPins([], [{ id: 'c1', hasPin: true, pin: '1234' }], {}).map.c1, hash);
   assert.equal(applyPins([], [{ id: 'c1', hasPin: true, pinHash: Buffer.from('1234').toString('base64') }], {}).map.c1, hash);
+});
+test('temporadas de la pantalla de carga', () => {
+  assert.equal(currentSeason('2026-10-23'), null);
+  assert.equal(currentSeason('2026-10-31'), 'halloween');
+  assert.equal(currentSeason('2026-11-02'), 'halloween');
+  assert.equal(currentSeason('2026-11-03'), null);
+  assert.equal(currentSeason('2026-11-30'), null);
+  assert.equal(currentSeason('2026-12-01'), 'christmas');
+  assert.equal(currentSeason('2027-01-06'), 'christmas');
+  assert.equal(currentSeason('2027-01-07'), null);
+  assert.equal(currentSeason('2027-06-15'), null);
 });

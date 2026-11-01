@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import Unicorn from "./Unicorn.jsx";
+import { useLoaderMusic } from "../../hooks/useLoaderMusic.js";
 import { playHalloweenMusic } from "../../lib/halloweenMusic.js";
 import "./halloween.css";
 
@@ -25,27 +25,7 @@ const Pumpkin = ({ className }) => (
 
 // Pantalla de carga de Halloween: luna, murciélagos, calabazas y el unicornio con sombrero de bruja
 export default function HalloweenLoader({ text, onSkip }) {
-  // Música: intenta sonar sola; si el navegador la bloquea, el primer toque la activa (en vez de saltar)
-  const musicRef = useRef(null);
-  const [blocked, setBlocked] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    playHalloweenMusic().then((m) => {
-      if (cancelled) return m?.stop();
-      musicRef.current = m;
-      if (!m) setBlocked(true);
-    });
-    return () => { cancelled = true; musicRef.current?.stop(); };
-  }, []);
-
-  const handleTap = async () => {
-    if (blocked) {
-      setBlocked(false);
-      musicRef.current = await playHalloweenMusic();
-      return;
-    }
-    onSkip?.();
-  };
+  const { blocked, handleTap } = useLoaderMusic(playHalloweenMusic, onSkip);
 
   return (
     <div className="halloween-loader" role="status" aria-live="polite" onClick={handleTap}>
