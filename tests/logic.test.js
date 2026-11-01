@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { currentCycle, previousCycle, runAutomations, computeFund, categoryBalances, describeChanges, cycleEndSummary, findDuplicateTx, findDuplicateRule } from '../src/shared.js';
 import { mergeData } from '../src/lib/merge.js';
+import { hashPin, stripPins, applyPins } from '../lib/pins.js';
 
 const base = () => ({
   sources: [{ id: 's1', name: 'Nómina Meli', amount: 1300 }],
@@ -95,4 +96,21 @@ test('duplicados: detección manual', () => {
   const h = { id: 't2', concept: 'Hipoteca', categoryId: 'c2', type: 'expense', amount: 300, date: '2026-11-01' };
   assert.ok(findDuplicateTx({ ...h, date: '2026-11-15' }, [h], [rule]), 'un recurrente se compara en todo el mes');
   assert.ok(findDuplicateRule({ ...rule, id: 'x' }, [rule]));
+});
+
+test('PIN de sobres: los hash no salen hacia la app y no se pierden al guardar', () => {
+  const hash = hashPin('c1', '1234');
+  const stored = [{ id: 'c1', name: 'Oculto', hasPin: true, pinHash: hash }, { id: 'c2', name: 'Normal' }];
+  const client = stripPins({ categories: stored }).categories;
+  assert.ok(client.every((c) => !('pinHash' in c) && !('pin' in c)));
+  const { categories, map } = applyPins(client, stored, {});
+  assert.equal(categories[0].pinHash, hash);
+  assert.equal(map.c1, hash);
+  // Deshacer el borrado de un sobre: ya no está en los datos, pero el PIN sigue guardado aparte
+  assert.equal(applyPins([client[0]], [], map).categories[0].pinHash, hash);
+  // Un sobre sin PIN no conserva ningún hash, ni uno enviado por la app
+  assert.ok(!('pinHash' in applyPins([{ id: 'c2', pinHash: 'x' }], stored, {}).categories[0]));
+  // Formatos antiguos: PIN en claro y base64
+  assert.equal(applyPins([], [{ id: 'c1', hasPin: true, pin: '1234' }], {}).map.c1, hash);
+  assert.equal(applyPins([], [{ id: 'c1', hasPin: true, pinHash: Buffer.from('1234').toString('base64') }], {}).map.c1, hash);
 });

@@ -3,7 +3,7 @@ import Sheet, { Field, AmountInput } from "../../components/ui/Sheet.jsx";
 import { todayISO } from "../../lib/format.js";
 
 // Alta o edición de un movimiento. preset = { type, categoryId } para abrirlo ya rellenado.
-export default function TransactionForm({ tx, preset = {}, categories, payers = [], actions, onClose }) {
+export default function TransactionForm({ tx, preset = {}, categories, payers = [], shortcuts = [], actions, onClose }) {
   const [type, setType] = useState(tx?.type || preset.type || "expense");
   const [categoryId, setCategoryId] = useState(tx?.categoryId || preset.categoryId || "");
   const [concept, setConcept] = useState(tx?.concept || "");
@@ -23,6 +23,20 @@ export default function TransactionForm({ tx, preset = {}, categories, payers = 
         <div className="segmented">
           <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => setType("expense")}>💸 Gasto</button>
           <button type="button" className={type === "income" ? "active income" : ""} onClick={() => setType("income")}>📥 Asignar al sobre</button>
+        </div>
+      )}
+      {!tx && type === "expense" && shortcuts.length > 0 && (
+        <div className="shortcuts" aria-label="Gastos habituales">
+          {shortcuts.map((s) => (
+            <button
+              key={`${s.concept}|${s.categoryId}`}
+              type="button"
+              className="chip"
+              onClick={() => { setConcept(s.concept); setCategoryId(s.categoryId); setAmount(String(s.amount).replace(".", ",")); }}
+            >
+              {s.concept}
+            </button>
+          ))}
         </div>
       )}
       <div className="form-grid">

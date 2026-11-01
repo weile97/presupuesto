@@ -1,4 +1,4 @@
-import { CreditCard, RefreshCw, Plus, Edit2, X, History, Wallet } from "lucide-react";
+import { CreditCard, RefreshCw, Plus, Edit2, X, History, Wallet, Split } from "lucide-react";
 import { SRC_ICONS } from "../../lib/constants.js";
 import { money, fmtDay } from "../../lib/format.js";
 
@@ -14,6 +14,11 @@ export default function PayrollSection({ sources, lastPayrollBySource, openSheet
           <button className="btn-secondary" onClick={() => openSheet("bulkPayroll")}>
             <RefreshCw size={15} /> Registrar nóminas
           </button>
+          {actions.pendingAllocations().length > 0 && (
+            <button className="btn-secondary" onClick={() => openSheet("distribute")}>
+              <Split size={15} /> Repartir
+            </button>
+          )}
           <button className="btn-primary" onClick={() => openSheet("source")}>
             <Plus size={15} /> Nueva fuente
           </button>

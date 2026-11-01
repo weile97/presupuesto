@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { uid, todayISO, money, parseAmount, nextMonthKey } from "../lib/format.js";
-import { hashPin, pinMatches, isSecureHash, migrateCategoryPins } from "../lib/pin.js";
+import { verifyCategoryPin, setCategoryPin } from "../lib/api.js";
 import { isAllocation, isRecurrentApplied, findDuplicateTx, findDuplicateRule, normalizeText } from "../shared.js";
 
 // --- Deshacer: funciones que devuelven el estado con el cambio revertido -------------------
@@ -41,22 +41,6 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     return () => clearTimeout(timer);
   }, [unlockedCats, notify]);
 
-  // Migración: los PIN antiguos (en claro o base64) pasan a hash SHA-256 y se borra el PIN en claro
-  const migratingRef = useRef(false);
-  useEffect(() => {
-    if (migratingRef.current || !data?.categories) return;
-    migratingRef.current = true;
-    migrateCategoryPins(data.categories)
-      .then((migrated) => {
-        if (!migrated) return;
-        const byId = new Map(migrated.map((c) => [c.id, c]));
-        const cur = getData();
-        save({ ...cur, categories: cur.categories.map((c) => byId.get(c.id) || c) });
-      })
-      .catch((err) => console.error("Error migrando PIN:", err))
-      .finally(() => { migratingRef.current = false; });
-  }, [data?.categories, getData, save]);
-
   const isLocked = (cat) => !!cat?.hasPin && !unlockedCats[cat.id];
 
   // Pide el PIN si el sobre está protegido. always=true lo pide aunque esté desbloqueado (borrados).
@@ -64,8 +48,12 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     if (!cat?.hasPin || (!always && unlockedCats[cat.id])) return true;
     const entered = await askPin(title);
     if (entered === null) return false;
-    if (await pinMatches(cat, entered)) return true;
-    notify("PIN incorrecto.", "error");
+    try {
+      if (await verifyCategoryPin(cat.id, entered)) return true;
+      notify("PIN incorrecto.", "error");
+    } catch (err) {
+      notify(err.message === "Failed to fetch" ? "Sin conexión: no se puede comprobar el PIN." : err.message, "error");
+    }
     return false;
   }
 
@@ -135,26 +123,32 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
   }
 
   // --- Sobres ------------------------------------------------------------------
-  async function saveCategory({ id, name, icon, color, hasPin, pin, goal }) {
+  async function saveCategory({ id, name, icon, color, hasPin, pin, goal, goalDate }) {
     const n = name.trim();
     if (!n) return fail("Pon un nombre al sobre.");
     if (categories.some((c) => c.id !== id && normalizeText(c.name) === normalizeText(n)) &&
       !(await confirmDuplicate(`Ya existe un sobre llamado "${n}". ¿Guardarlo igualmente?`))) return false;
     const existing = id ? catById.get(id) : null;
     const newId = id || uid();
-    let pinHash = "";
     if (hasPin) {
-      if (pin.trim()) pinHash = await hashPin(newId, pin);
-      else if (isSecureHash(existing)) pinHash = existing.pinHash; // vacío = mantener el PIN actual
-      else return fail("Asigna un PIN al sobre.");
+      if (pin.trim()) {
+        try {
+          await setCategoryPin(newId, pin);
+        } catch (err) {
+          return fail(err.message === "Failed to fetch" ? "Sin conexión: no se puede guardar el PIN." : err.message);
+        }
+      } else if (!existing?.hasPin) { // vacío = mantener el PIN actual
+        return fail("Asigna un PIN al sobre.");
+      }
     }
     const goalParsed = parseAmount(goal);
-    const fields = { name: n, icon, color, hasPin, pinHash, targetGoal: isNaN(goalParsed) ? 0 : goalParsed };
+    const targetGoal = isNaN(goalParsed) ? 0 : goalParsed;
+    const fields = { name: n, icon, color, hasPin, targetGoal, goalDate: targetGoal > 0 ? goalDate || null : null };
     const cur = getData();
     save({
       ...cur,
       categories: id
-        ? cur.categories.map((c) => { if (c.id !== id) return c; const { pin: _pin, ...rest } = c; return { ...rest, ...fields }; })
+        ? cur.categories.map((c) => (c.id === id ? { ...c, ...fields } : c))
         : [...cur.categories, { id: newId, initialBalance: 0, ...fields }]
     });
     celebrate(id ? "¡Sobre guardado!" : "¡Sobre creado!");
@@ -196,14 +190,33 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     moveCategory(id, categories[j].id);
   }
 
+  // Movimiento que deja el Fondo General bien al quitar los movimientos de un sobre: borrarlos devuelve al
+  // fondo lo asignado este ciclo; lo correcto es que vuelva solo el dinero que queda sin gastar.
+  function fundCorrection(cat, cur, moneyBack, concept) {
+    const assigned = cur.transactions
+      .filter((t) => t.categoryId === cat.id && isAllocation(t) && !t.settled)
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const amount = Math.round((Math.max(moneyBack, 0) - assigned) * 100) / 100;
+    if (amount === 0) return null;
+    return { id: uid(), concept, categoryId: null, sourceId: null, type: "carryover", amount, date: todayISO() };
+  }
+
   async function deleteCategory(id) {
     const cat = catById.get(id);
     if (!cat || !(await requirePin(cat, `PIN para eliminar "${cat.name}"`, true))) return false;
+    const balance = categoryBalances[id]?.balance || 0;
+    if (balance > 0 && !(await askConfirm({
+      title: `Eliminar "${cat.name}"`,
+      message: `Le quedan ${money(balance)}, que volverán al Fondo General. ¿Eliminarlo?`,
+      confirmLabel: "Eliminar"
+    }))) return false;
     const cur = getData();
+    const fix = fundCorrection(cat, cur, balance, `Saldo del sobre eliminado: ${cat.name}`);
     const removedCat = withIndex(cur.categories, (c) => c.id === id);
     const removedTxs = withIndex(cur.transactions, (t) => t.categoryId === id);
-    save({ ...cur, categories: cur.categories.filter((c) => c.id !== id), transactions: cur.transactions.filter((t) => t.categoryId !== id) });
-    undoable(`Sobre "${cat.name}" eliminado.`, compose(reinsert("categories", removedCat), reinsert("transactions", removedTxs)));
+    const kept = cur.transactions.filter((t) => t.categoryId !== id);
+    save({ ...cur, categories: cur.categories.filter((c) => c.id !== id), transactions: fix ? [fix, ...kept] : kept });
+    undoable(`Sobre "${cat.name}" eliminado.`, compose(reinsert("categories", removedCat), reinsert("transactions", removedTxs), removeIds("transactions", fix ? [fix.id] : [])));
     return true;
   }
 
@@ -213,8 +226,16 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     const cur = getData();
     const removed = withIndex(cur.transactions, (t) => t.categoryId === id);
     if (removed.length === 0) return notify("Este sobre no tiene movimientos.", "error");
-    save({ ...cur, transactions: cur.transactions.filter((t) => t.categoryId !== id) });
-    undoable(`Historial de "${cat.name}" vaciado.`, reinsert("transactions", removed));
+    const moneyBack = (categoryBalances[id]?.balance || 0) - (cat.initialBalance || 0);
+    if (moneyBack > 0 && !(await askConfirm({
+      title: `Vaciar "${cat.name}"`,
+      message: `El sobre se queda sin movimientos y ${money(moneyBack)} volverán al Fondo General. ¿Continuar?`,
+      confirmLabel: "Vaciar"
+    }))) return;
+    const fix = fundCorrection(cat, cur, moneyBack, `Saldo del sobre vaciado: ${cat.name}`);
+    const kept = cur.transactions.filter((t) => t.categoryId !== id);
+    save({ ...cur, transactions: fix ? [fix, ...kept] : kept });
+    undoable(`Historial de "${cat.name}" vaciado.`, compose(reinsert("transactions", removed), removeIds("transactions", fix ? [fix.id] : [])));
   }
 
   function clearAllTransactions() {
@@ -288,19 +309,27 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
   }
 
   // --- Recurrentes -----------------------------------------------------------------
-  async function addRecurrent({ concept, categoryId, type, amount, day }) {
+  // Crea una regla o, con id, edita una existente
+  async function saveRecurrent({ id, concept, categoryId, type, amount, day }) {
     const amt = parseAmount(amount);
     const d = parseInt(day, 10);
     if (!concept.trim() || isNaN(amt) || amt <= 0 || !categoryId || isNaN(d) || d < 1 || d > 31) {
       return fail("Introduce datos válidos para la regla recurrente.");
     }
-    if (findDuplicateRule({ concept, categoryId, type, amount: amt, day: d }, recurrents) &&
+    if (findDuplicateRule({ concept, categoryId, type, amount: amt, day: d }, recurrents.filter((r) => r.id !== id)) &&
       !(await confirmDuplicate(`Ya existe una regla "${concept.trim()}" de ${money(amt)} el día ${d} en ese sobre. Si guardas otra igual solo se cobrará una vez al mes. ¿Guardarla igualmente?`))) return false;
     const today = todayISO();
     // Si el día de este mes ya pasó, empieza a aplicarse el mes que viene
     const startMonth = d >= Number(today.slice(8, 10)) ? today.slice(0, 7) : nextMonthKey(today);
-    save({ ...data, recurrents: [...recurrents, { id: uid(), concept: concept.trim(), categoryId, type, amount: amt, day: d, startMonth }] });
-    notify(`Regla programada: se aplicará sola el día ${d} de cada mes.`);
+    const fields = { concept: concept.trim(), categoryId, type, amount: amt, day: d };
+    const cur = getData();
+    save({
+      ...cur,
+      recurrents: id
+        ? cur.recurrents.map((r) => (r.id === id ? { ...r, ...fields } : r))
+        : [...cur.recurrents, { id: uid(), ...fields, startMonth }]
+    });
+    notify(id ? "Regla actualizada." : `Regla programada: se aplicará sola el día ${d} de cada mes.`);
     return true;
   }
 
@@ -308,6 +337,30 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     const removed = withIndex(recurrents, (r) => r.id === id);
     save({ ...data, recurrents: recurrents.filter((r) => r.id !== id) });
     undoable("Regla recurrente eliminada.", reinsert("recurrents", removed));
+  }
+
+  // Reglas de ingreso a sobres que faltan este mes: son las que se ofrecen al repartir la nómina
+  const pendingAllocations = () => {
+    const month = todayISO().slice(0, 7);
+    return (getData().recurrents || []).filter((r) => r.type === "income" && !isRecurrentApplied(r, getData().transactions, month));
+  };
+
+  // Reparte el Fondo General entre sobres según las reglas (con el mismo id, la regla ya no se aplica sola este mes)
+  function distribute(amounts) {
+    const month = todayISO().slice(0, 7);
+    const newTxs = pendingAllocations().flatMap((rule) => {
+      const amt = parseAmount(amounts[rule.id]);
+      if (isNaN(amt) || amt <= 0) return [];
+      return [{
+        id: `rec-${rule.id}-${month}`, recurrentId: rule.id, concept: rule.concept, categoryId: rule.categoryId,
+        sourceId: null, type: "income", amount: amt, date: todayISO()
+      }];
+    });
+    if (newTxs.length === 0) return fail("Introduce al menos un importe.");
+    save({ ...getData(), transactions: [...newTxs, ...getData().transactions] });
+    celebrate("¡Nómina repartida!");
+    undoable(`Repartidos ${money(newTxs.reduce((a, t) => a + t.amount, 0))} entre ${newTxs.length} sobres.`, removeIds("transactions", newTxs.map((t) => t.id)));
+    return true;
   }
 
   function applyRecurrentsNow() {
@@ -352,7 +405,7 @@ export function useBudgetActions({ data, stats, save, getData, notify, celebrate
     depositPayroll, bulkPayroll, saveSource, deleteSource,
     saveCategory, adjustCategory, moveCategory, shiftCategory, deleteCategory, clearCategory, transfer,
     canEditTx, saveTransaction, deleteTransaction, clearAllTransactions,
-    addRecurrent, deleteRecurrent, applyRecurrentsNow,
+    saveRecurrent, deleteRecurrent, applyRecurrentsNow, pendingAllocations, distribute,
     exportCSV
   };
 }

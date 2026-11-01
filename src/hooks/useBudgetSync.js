@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { API_URL } from "../lib/constants.js";
+import { apiFetch } from "../lib/api.js";
 import { DEVICE_ID } from "../lib/device.js";
 import { mergeData, splitRemote } from "../lib/merge.js";
 import { clearAppBadge } from "../lib/push.js";
@@ -58,7 +59,7 @@ export function useBudgetSync({ userName, onMessage }) {
       try {
         for (let attempt = 0; attempt < 4; attempt++) {
           const toSend = dataRef.current;
-          const res = await fetch(API_URL, {
+          const res = await apiFetch(API_URL, {
             method: "POST",
             cache: "no-store",
             headers: { "Content-Type": "application/json" },
@@ -119,7 +120,7 @@ export function useBudgetSync({ userName, onMessage }) {
     if (pendingRef.current) return flushSave();
     if (busyRef.current) return;
     try {
-      const res = await fetch(API_URL, { cache: "no-store" });
+      const res = await apiFetch(API_URL, { cache: "no-store" });
       if (!res.ok) return;
       const remote = await res.json();
       // Si mientras tanto hubo cambios locales o la versión no cambió, no tocamos nada
@@ -147,7 +148,7 @@ export function useBudgetSync({ userName, onMessage }) {
 
   // Carga inicial
   useEffect(() => {
-    fetch(API_URL, { cache: "no-store" })
+    apiFetch(API_URL, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();

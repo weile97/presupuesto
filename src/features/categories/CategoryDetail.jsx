@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { X, Lock, Plus, Minus, Wallet, Edit2, Eye, EyeOff, Search, ArrowRightLeft, Eraser, Trash2 } from "lucide-react";
 import { AmountInput } from "../../components/ui/Sheet.jsx";
 import { CAT_ICONS } from "../../lib/constants.js";
-import { money, isLightColor, sortByDateDesc } from "../../lib/format.js";
+import { money, fmtDay, isLightColor, sortByDateDesc, todayISO } from "../../lib/format.js";
 import TransactionItem from "../transactions/TransactionItem.jsx";
 
 // Ventana con el detalle de un sobre: saldo, accesos rápidos y sus movimientos
@@ -16,6 +16,9 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
   const color = cat.color || "#151C28";
   const fg = isLightColor(color) ? "#0F172A" : "white";
   const pct = cat.targetGoal > 0 ? Math.min(100, (stats.balance / cat.targetGoal) * 100) : 0;
+
+  // Meta con fecha: cuánto falta y cuánto meter al mes
+  const goalPlan = cat.targetGoal > 0 && cat.goalDate ? monthlyGoal(cat.targetGoal, stats.balance, cat.goalDate) : null;
 
   const [adjust, setAdjust] = useState("");
   const applyAdjust = async (sign) => {
@@ -64,6 +67,15 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
               <div className="progress-bar-bg">
                 <div className="progress-bar-fill" style={{ width: `${pct}%`, backgroundColor: "var(--pink-primary)" }} />
               </div>
+              {goalPlan && (
+                <div className="goal-plan">
+                  {goalPlan.remaining <= 0
+                    ? `🎯 Meta conseguida (para el ${fmtDay(cat.goalDate)})`
+                    : goalPlan.months === 0
+                      ? `⏰ La fecha ya ha pasado. Faltan ${money(goalPlan.remaining)}`
+                      : `🎯 Faltan ${money(goalPlan.remaining)}: mete ${money(goalPlan.perMonth)} al mes hasta el ${fmtDay(cat.goalDate)}`}
+                </div>
+              )}
             </div>
           )}
 
@@ -130,4 +142,13 @@ export default function CategoryDetail({ category: cat, stats, transactions, act
       </div>
     </div>
   );
+}
+
+// Meses completos (como mínimo 1) entre hoy y la fecha de la meta; 0 si ya ha pasado
+function monthlyGoal(goal, balance, goalDate) {
+  const today = todayISO();
+  const remaining = Math.round((goal - balance) * 100) / 100;
+  if (goalDate < today) return { remaining, months: 0, perMonth: 0 };
+  const months = Math.max(1, (+goalDate.slice(0, 4) - +today.slice(0, 4)) * 12 + (+goalDate.slice(5, 7) - +today.slice(5, 7)));
+  return { remaining, months, perMonth: Math.ceil((remaining / months) * 100) / 100 };
 }

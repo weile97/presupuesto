@@ -1,4 +1,5 @@
 import { getRedis, notifySubscribers, SUBS_KEY, PUSH_ERROR_KEY } from '../lib/store.js';
+import { requireAuth } from '../lib/auth.js';
 
 // Clave pública que usa la app (src/lib/push.js). Debe ser igual a VAPID_PUBLIC_KEY de Vercel.
 const APP_PUBLIC_KEY = 'BOH05ykgs-MQZRuk7mCpNVF7jbYhyix_BKAFoLRSIGxyIZQFM2YU1ttNkjwTgKUoOgcoKeVSEy-9q8PefNe0bpw';
@@ -25,9 +26,6 @@ async function diagnostics(redis) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
@@ -42,6 +40,8 @@ export default async function handler(req, res) {
       console.error('No se pudo inicializar la conexión con Redis:', err);
       return res.status(500).json({ error: 'No se pudo conectar con la base de datos.' });
     }
+
+    if (!(await requireAuth(req, res, redis))) return;
 
     if (req.method === 'GET') {
       return res.status(200).json(await diagnostics(redis));

@@ -8,11 +8,12 @@ export function CategoryForm({ category, actions, onClose }) {
   const [icon, setIcon] = useState(category?.icon || "wallet");
   const [color, setColor] = useState(category?.color || PRESET_COLORS[0]);
   const [goal, setGoal] = useState(category?.targetGoal ? String(category.targetGoal).replace(".", ",") : "");
+  const [goalDate, setGoalDate] = useState(category?.goalDate || "");
   const [hasPin, setHasPin] = useState(!!category?.hasPin);
   const [pin, setPin] = useState("");
   const [adjust, setAdjust] = useState("");
 
-  const submit = async () => (await actions.saveCategory({ id: category?.id, name, icon, color, hasPin, pin, goal })) && onClose();
+  const submit = async () => (await actions.saveCategory({ id: category?.id, name, icon, color, hasPin, pin, goal, goalDate })) && onClose();
 
   return (
     <Sheet title={category ? `Editar sobre: ${category.name}` : "Crear sobre"} onClose={onClose} onSubmit={submit}>
@@ -22,6 +23,9 @@ export function CategoryForm({ category, actions, onClose }) {
         </Field>
         <Field label="Meta / presupuesto (€)">
           <AmountInput value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="Ej. 300" />
+        </Field>
+        <Field label="Fecha de la meta (opcional)">
+          <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} />
         </Field>
         <Field label="Color" wide><ColorPicker value={color} onChange={setColor} /></Field>
         <Field label="Icono" wide><IconPicker icons={CAT_ICONS} order={CAT_ICON_ORDER} value={icon} onChange={setIcon} /></Field>

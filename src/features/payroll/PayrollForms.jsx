@@ -3,6 +3,7 @@ import { Wallet } from "lucide-react";
 import Sheet, { Field, AmountInput } from "../../components/ui/Sheet.jsx";
 import { IconPicker, ColorPicker } from "../../components/ui/Pickers.jsx";
 import { SRC_ICONS, PRESET_COLORS } from "../../lib/constants.js";
+import { money, parseAmount } from "../../lib/format.js";
 
 const amountText = (n) => (n ? String(n).replace(".", ",") : "");
 
@@ -49,9 +50,14 @@ export function DepositForm({ source, actions, onClose }) {
   );
 }
 
-export function BulkPayrollForm({ sources, actions, onClose }) {
+// Tras registrar las nóminas, ofrece repartirlas si hay reglas de ingreso pendientes este mes
+export function BulkPayrollForm({ sources, actions, onClose, onDistribute }) {
   const [amounts, setAmounts] = useState(() => Object.fromEntries(sources.map((s) => [s.id, amountText(s.amount)])));
-  const submit = async () => (await actions.bulkPayroll(amounts)) && onClose();
+  const submit = async () => {
+    if (!(await actions.bulkPayroll(amounts))) return;
+    if (actions.pendingAllocations().length > 0) onDistribute();
+    else onClose();
+  };
 
   return (
     <Sheet
@@ -77,6 +83,42 @@ export function BulkPayrollForm({ sources, actions, onClose }) {
           );
         })}
       </div>
+    </Sheet>
+  );
+}
+
+// Reparto del Fondo General entre sobres, a partir de las reglas de ingreso que faltan este mes
+export function DistributeForm({ rules, categoriesById, available, actions, onClose }) {
+  const [amounts, setAmounts] = useState(() => Object.fromEntries(rules.map((r) => [r.id, amountText(r.amount)])));
+  const total = rules.reduce((sum, r) => sum + (parseAmount(amounts[r.id]) || 0), 0);
+  const submit = () => actions.distribute(amounts) && onClose();
+
+  return (
+    <Sheet
+      title="Repartir la nómina"
+      subtitle="Revisa cuánto va a cada sobre. Deja en blanco lo que no quieras repartir ahora."
+      onClose={onClose}
+      onSubmit={submit}
+      submitLabel={`Repartir ${money(total)}`}
+    >
+      <div className="bulk-list">
+        {rules.map((r) => (
+          <label key={r.id} className="bulk-row">
+            <span className="bulk-name">
+              {r.concept}
+              <span className="adjust-hint distribute-cat">{categoriesById.get(r.categoryId)?.name || "Sobre eliminado"}</span>
+            </span>
+            <AmountInput
+              value={amounts[r.id] ?? ""}
+              onChange={(e) => setAmounts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+              style={{ maxWidth: 120 }}
+            />
+          </label>
+        ))}
+      </div>
+      <p className={`distribute-left ${total > available ? "over" : ""}`}>
+        Quedarán {money(available - total)} en el Fondo General
+      </p>
     </Sheet>
   );
 }

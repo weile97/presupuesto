@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { EMPTY } from "../lib/constants.js";
-import { computeFund, currentCycle, previousCycle, categoryBalances as calcBalances, expensesBetween } from "../shared.js";
+import { computeFund, currentCycle, previousCycle, categoryBalances as calcBalances, expensesBetween, normalizeText } from "../shared.js";
 
 // Valores derivados de los datos (saldos, Fondo General, ciclo). Se recalculan solo si cambian los datos.
 export function useBudgetStats(data) {
@@ -42,8 +42,26 @@ export function useBudgetStats(data) {
   // Nombres de quienes han pagado algo alguna vez (para elegir rápido en el formulario)
   const payers = useMemo(() => [...new Set(transactions.map((t) => t.paidBy).filter(Boolean))], [transactions]);
 
+  // Atajos: los gastos que más se repiten (sin sobres con PIN), con el último importe usado
+  const shortcuts = useMemo(() => {
+    const groups = new Map();
+    for (const t of transactions) {
+      if (t.type !== "expense" || !t.concept || !t.categoryId || t.recurrentId) continue;
+      const cat = catById.get(t.categoryId);
+      if (!cat || cat.hasPin) continue;
+      const key = `${normalizeText(t.concept)}|${t.categoryId}`;
+      const g = groups.get(key);
+      if (!g) groups.set(key, { concept: t.concept, categoryId: t.categoryId, amount: t.amount, date: t.date, count: 1 });
+      else {
+        g.count++;
+        if (t.date > g.date) { g.date = t.date; g.amount = t.amount; }
+      }
+    }
+    return [...groups.values()].filter((g) => g.count >= 2).sort((a, b) => b.count - a.count).slice(0, 6);
+  }, [transactions, catById]);
+
   return {
-    sources, categories, transactions, recurrents,
+    shortcuts, sources, categories, transactions, recurrents,
     fund, catById, categoryBalances, lastPayrollBySource, cycleSummary, payers, cycle
   };
 }

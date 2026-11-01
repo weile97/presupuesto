@@ -1,8 +1,8 @@
 // Ejecutado a diario por Vercel Cron (ver vercel.json).
 // Hace el cambio de ciclo del día 29 y aplica los recurrentes aunque nadie abra la app,
 // y avisa a los móviles por push.
-import { getRedis, readData, saveData, notifySubscribers, withTimeout, setCommonHeaders } from '../lib/store.js';
-import { runAutomations, cycleEndSummary } from '../src/shared.js';
+import { getRedis, readData, saveData, notifySubscribers, withTimeout, setCommonHeaders, dailyKey, DAILY_DAYS } from '../lib/store.js';
+import { runAutomations, cycleEndSummary, todayLocal } from '../src/shared.js';
 
 export default async function handler(req, res) {
   setCommonHeaders(res, 'GET, OPTIONS');
@@ -26,6 +26,9 @@ export default async function handler(req, res) {
         if (endSummary) await withTimeout(notifySubscribers(redis, endSummary, null), 8000);
         return res.status(200).json({ endSummary: !!endSummary });
       }
+
+      // Copia diaria aunque ese día nadie guarde nada
+      await redis.set(dailyKey(todayLocal()), JSON.stringify(data), { nx: true, ex: DAILY_DAYS * 86400 });
 
       const result = runAutomations(data);
       if (!result) return res.status(200).json({ changed: false });

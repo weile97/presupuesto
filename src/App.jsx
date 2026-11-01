@@ -17,7 +17,7 @@ import { todayLocal } from "./shared.js";
 import UnicornCelebration from "./components/unicorn/UnicornCelebration.jsx";
 
 import PayrollSection from "./features/payroll/PayrollSection.jsx";
-import { SourceForm, DepositForm, BulkPayrollForm } from "./features/payroll/PayrollForms.jsx";
+import { SourceForm, DepositForm, BulkPayrollForm, DistributeForm } from "./features/payroll/PayrollForms.jsx";
 import CategoriesSection from "./features/categories/CategoriesSection.jsx";
 import CategoryDetail from "./features/categories/CategoryDetail.jsx";
 import { CategoryForm, TransferForm } from "./features/categories/CategoryForms.jsx";
@@ -28,7 +28,10 @@ import NameForm from "./features/settings/NameForm.jsx";
 import BackupsForm from "./features/settings/BackupsForm.jsx";
 import WhatsNew from "./features/settings/WhatsNew.jsx";
 import { hasUnseenUpdate, markUpdateSeen } from "./lib/changelog.js";
+import { AUTH_REQUIRED_EVENT } from "./lib/api.js";
+import PinGate from "./components/PinGate.jsx";
 import CycleSummary from "./features/summary/CycleSummary.jsx";
+import AnnualChart from "./features/summary/AnnualChart.jsx";
 import PinDialog from "./components/ui/PinDialog.jsx";
 import ConfirmDialog from "./components/ui/ConfirmDialog.jsx";
 
@@ -48,6 +51,14 @@ export default function App() {
 
   // --- Usuario de este móvil ---------------------------------------------------
   const [userName, setUserName] = useState(readUserName);
+
+  // --- Acceso: si el servidor pide el PIN (401) se muestra la pantalla de entrada ---
+  const [authRequired, setAuthRequired] = useState(false);
+  useEffect(() => {
+    const onAuth = () => setAuthRequired(true);
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuth);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuth);
+  }, []);
 
   // --- Datos -------------------------------------------------------------------
   const { data, loading, loadError, save, getData, refresh } = useBudgetSync({ userName, onMessage: notify });
@@ -103,6 +114,8 @@ export default function App() {
     push.enable();
   }
 
+  if (authRequired) return <PinGate />;
+
   if (loading || !minTimePassed) return <UnicornLoader halloween={HALLOWEEN} onSkip={loading ? undefined : () => setMinTimePassed(true)} />;
 
   if (loadError && !data) {
@@ -150,7 +163,8 @@ export default function App() {
         />
         <CycleSummary categories={categories} cycleSummary={stats.cycleSummary} isLocked={actions.isLocked} />
         <PayrollSection sources={sources} lastPayrollBySource={lastPayrollBySource} openSheet={openSheet} actions={actions} />
-        <RecurrentsSection recurrents={recurrents} transactions={transactions} catById={catById} actions={actions} openSheet={openSheet} />
+        <RecurrentsSection recurrents={recurrents} transactions={transactions} catById={catById} categoryBalances={categoryBalances} actions={actions} openSheet={openSheet} />
+        <AnnualChart transactions={transactions} categories={categories} isLocked={actions.isLocked} />
         <TransactionsSection
           transactions={transactions}
           catById={catById}
@@ -182,11 +196,12 @@ export default function App() {
 
       {sheet?.type === "source" && <SourceForm key={sheet.n} {...formProps} source={sheet.source} />}
       {sheet?.type === "deposit" && <DepositForm key={sheet.n} {...formProps} source={sheet.source} />}
-      {sheet?.type === "bulkPayroll" && <BulkPayrollForm key={sheet.n} {...formProps} sources={sources} />}
+      {sheet?.type === "bulkPayroll" && <BulkPayrollForm key={sheet.n} {...formProps} sources={sources} onDistribute={() => openSheet("distribute")} />}
+      {sheet?.type === "distribute" && <DistributeForm key={sheet.n} {...formProps} rules={actions.pendingAllocations()} categoriesById={catById} available={fund.available} />}
       {sheet?.type === "category" && <CategoryForm key={sheet.n} {...formProps} category={sheet.category} />}
       {sheet?.type === "transfer" && <TransferForm key={sheet.n} {...formProps} categories={categories} from={sheet.from} />}
-      {sheet?.type === "tx" && <TransactionForm key={sheet.n} {...formProps} tx={sheet.tx} preset={sheet.preset} categories={categories} payers={stats.payers} />}
-      {sheet?.type === "recurrent" && <RecurrentForm key={sheet.n} {...formProps} categories={categories} />}
+      {sheet?.type === "tx" && <TransactionForm key={sheet.n} {...formProps} tx={sheet.tx} preset={sheet.preset} categories={categories} payers={stats.payers} shortcuts={stats.shortcuts} />}
+      {sheet?.type === "recurrent" && <RecurrentForm key={sheet.n} {...formProps} rule={sheet.rule} categories={categories} />}
       {sheet?.type === "name" && <NameForm key={sheet.n} initial={userName} onSave={saveUserName} onClose={closeSheet} notify={notify} onOpenBackups={() => openSheet("backups")} onOpenNews={() => { closeSheet(); setShowNews(true); }} />}
       {sheet?.type === "backups" && <BackupsForm key={sheet.n} userName={userName} notify={notify} onRestored={refresh} onClose={closeSheet} />}
       {showNews && <WhatsNew onClose={closeNews} />}

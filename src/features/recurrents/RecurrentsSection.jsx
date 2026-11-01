@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Calendar, RefreshCw, Plus, X } from "lucide-react";
+import { Calendar, RefreshCw, Plus, X, Edit2 } from "lucide-react";
 import Sheet, { Field, AmountInput } from "../../components/ui/Sheet.jsx";
 import { money, todayISO } from "../../lib/format.js";
 import { isRecurrentApplied } from "../../shared.js";
 
-export default function RecurrentsSection({ recurrents, transactions, catById, actions, openSheet }) {
+export default function RecurrentsSection({ recurrents, transactions, catById, categoryBalances, actions, openSheet }) {
   const month = todayISO().slice(0, 7);
 
   return (
@@ -25,11 +25,16 @@ export default function RecurrentsSection({ recurrents, transactions, catById, a
           {recurrents.map((r) => {
             const cat = catById.get(r.categoryId);
             const applied = isRecurrentApplied(r, transactions, month);
+            // Aviso antes del cobro. En sobres con PIN no se revela el saldo.
+            const lowBalance = !applied && r.type === "expense" && cat && !cat.hasPin && (categoryBalances[cat.id]?.balance || 0) < r.amount;
             return (
               <div className="card" key={r.id} style={{ padding: 16 }}>
                 <div className="card-top" style={{ marginBottom: 8 }}>
                   <span style={{ fontSize: 14, fontWeight: 700 }}>{r.concept}</span>
-                  <button className="btn-icon" onClick={() => actions.deleteRecurrent(r.id)} aria-label="Eliminar regla"><X size={14} /></button>
+                  <div style={{ display: "flex" }}>
+                    <button className="btn-icon" onClick={() => openSheet("recurrent", { rule: r })} aria-label="Editar regla"><Edit2 size={14} /></button>
+                    <button className="btn-icon" onClick={() => actions.deleteRecurrent(r.id)} aria-label="Eliminar regla"><X size={14} /></button>
+                  </div>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
                   Día {r.day} de cada mes • <strong style={{ color: "white" }}>{cat ? cat.name : "Sobre eliminado"}</strong>
@@ -38,8 +43,8 @@ export default function RecurrentsSection({ recurrents, transactions, catById, a
                   <div style={{ fontSize: 16, fontWeight: 800, color: r.type === "expense" ? "var(--red)" : "var(--green)" }}>
                     {r.type === "expense" ? "-" : "+"}{money(r.amount)}
                   </div>
-                  <span className={`status-pill ${applied ? "done" : ""}`}>
-                    {applied ? "✓ Aplicado este mes" : r.startMonth && month < r.startMonth ? "Empieza el mes que viene" : `Automático el día ${r.day}`}
+                  <span className={`status-pill ${applied ? "done" : ""} ${lowBalance ? "warn" : ""}`}>
+                    {lowBalance ? "⚠️ Saldo insuficiente" : applied ? "✓ Aplicado este mes" : r.startMonth && month < r.startMonth ? "Empieza el mes que viene" : `Automático el día ${r.day}`}
                   </span>
                 </div>
               </div>
@@ -51,20 +56,20 @@ export default function RecurrentsSection({ recurrents, transactions, catById, a
   );
 }
 
-export function RecurrentForm({ categories, actions, onClose }) {
-  const [concept, setConcept] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [type, setType] = useState("expense");
-  const [amount, setAmount] = useState("");
-  const [day, setDay] = useState("1");
+export function RecurrentForm({ rule, categories, actions, onClose }) {
+  const [concept, setConcept] = useState(rule?.concept || "");
+  const [categoryId, setCategoryId] = useState(rule?.categoryId || "");
+  const [type, setType] = useState(rule?.type || "expense");
+  const [amount, setAmount] = useState(rule ? String(rule.amount).replace(".", ",") : "");
+  const [day, setDay] = useState(rule ? String(rule.day) : "1");
 
-  const submit = async () => (await actions.addRecurrent({ concept, categoryId, type, amount, day })) && onClose();
+  const submit = async () => (await actions.saveRecurrent({ id: rule?.id, concept, categoryId, type, amount, day })) && onClose();
 
   return (
-    <Sheet title="Nueva regla recurrente" onClose={onClose} onSubmit={submit}>
+    <Sheet title={rule ? "Editar regla recurrente" : "Nueva regla recurrente"} onClose={onClose} onSubmit={submit}>
       <div className="form-grid">
         <Field label="Concepto">
-          <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} placeholder="Ej. Hipoteca, Netflix…" autoFocus />
+          <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} placeholder="Ej. Hipoteca, Netflix…" autoFocus={!rule} />
         </Field>
         <Field label="Sobre">
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>

@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 // Definición de __dirname para ES Modules
@@ -61,6 +62,21 @@ app.post('/api/data', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Error guardando en data.json" });
   }
+});
+
+// Solo para desarrollo local: acceso sin comprobar y PIN de sobres en data.json
+const sha = (id, pin) => 's1:' + crypto.createHash('sha256').update(`${id}:${String(pin).trim()}`).digest('hex');
+app.post('/api/auth', (req, res) => {
+  const { action, categoryId, pin } = req.body || {};
+  if (action === 'login') return res.json({ token: 'local' });
+  const data = readData();
+  const cat = (data.categories || []).find((c) => c.id === categoryId);
+  if (action === 'verify-pin') return res.json({ ok: !!cat && (cat.pinHash === sha(categoryId, pin) || cat.pin === pin) });
+  if (action === 'set-pin') {
+    if (cat) { cat.pinHash = sha(categoryId, pin); fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); }
+    return res.json({ success: true });
+  }
+  res.status(400).json({ error: 'Acción no válida' });
 });
 
 app.listen(PORT, () => {

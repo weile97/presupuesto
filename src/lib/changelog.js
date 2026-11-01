@@ -3,19 +3,34 @@
 // highlights = lo que se ve al abrir; details = lo que aparece al pulsar "Mostrar más".
 export const CHANGELOG = [
   {
+    version: "2026-11-03",
+    title: "Más seguridad y menos trabajo",
+    highlights: [
+      "🔐 La app ahora pide un PIN de acceso, una sola vez en cada móvil.",
+      "💸 Reparte la nómina entre sobres y apunta tus gastos habituales con un toque.",
+      "📊 Nuevo gráfico del último año y quién debe a quién en el ciclo."
+    ],
+    details: [
+      "Los PIN de los sobres se comprueban en el servidor, con límite de intentos.",
+      "Además de las 50 últimas versiones, ahora se guarda una copia diaria durante 35 días.",
+      "Al eliminar o vaciar un sobre, solo vuelve al Fondo General el dinero que quedaba sin gastar.",
+      "Las reglas recurrentes ya se pueden editar y avisan si el sobre no tiene saldo suficiente.",
+      "Desliza un movimiento a la izquierda para borrarlo o a la derecha para editarlo.",
+      "Los sobres con meta pueden tener fecha: la app calcula cuánto meter al mes."
+    ]
+  },
+  {
     version: "2026-11-02",
     title: "Adiós a los duplicados",
     highlights: [
       "🔁 Los recurrentes ya no se cobran dos veces si los pasaste a mano.",
-      "⚠️ Si vas a añadir algo repetido, la app te pide confirmación.",
-      "🎃 Pantalla de carga de Halloween con música, hasta el 2 de noviembre."
+      "⚠️ Si vas a añadir algo repetido, la app te pide confirmación."
     ],
     details: [
       "Un recurrente se da por pagado si hay un movimiento con el mismo concepto, sobre, tipo e importe a 14 días o menos de su fecha de cobro.",
       "Dos reglas iguales solo cobran una vez al mes.",
       "La confirmación de duplicados aparece en movimientos, nóminas, traspasos, ajustes, sobres, fuentes y reglas recurrentes.",
-      "Corregido un error de envío de notificaciones: las suscripciones antiguas que ya no funcionan se borran solas.",
-      "Halloween: unicornio con sombrero de bruja, luna, murciélagos y calabazas. Si el móvil bloquea el sonido, toca la pantalla para activar la música."
+      "Corregido un error de envío de notificaciones: las suscripciones antiguas que ya no funcionan se borran solas."
     ]
   }
 ];

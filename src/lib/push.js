@@ -1,4 +1,5 @@
 import { DEVICE_ID } from "./device.js";
+import { apiFetch } from "./api.js";
 
 // Debe coincidir con la VAPID_PUBLIC_KEY configurada en Vercel
 const VAPID_PUBLIC_KEY = "BOH05ykgs-MQZRuk7mCpNVF7jbYhyix_BKAFoLRSIGxyIZQFM2YU1ttNkjwTgKUoOgcoKeVSEy-9q8PefNe0bpw";
@@ -34,7 +35,7 @@ export async function subscribeToPush() {
     }
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
 
-    const res = await fetch("/api/subscribe", {
+    const res = await apiFetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub.toJSON(), deviceId: DEVICE_ID })
@@ -55,7 +56,7 @@ export function showLocalNotification(title, body) {
 
 // Pide al servidor un aviso de prueba para este móvil (llega a los 10 s)
 export async function sendTestPush() {
-  const res = await fetch("/api/subscribe", {
+  const res = await apiFetch("/api/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ test: true, deviceId: DEVICE_ID })

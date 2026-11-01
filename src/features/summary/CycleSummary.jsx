@@ -74,6 +74,9 @@ export default function CycleSummary({ categories, cycleSummary, isLocked }) {
                   <span key={name}><i className={`dot p${i % 4}`} /> {name}: <strong>{money(v)}</strong> ({Math.round((v / paidTotal) * 100)}%)</span>
                 ))}
               </div>
+              {payers.length === 2 && payers[0][1] !== payers[1][1] && (
+                <div className="settle-up">⚖️ Para ir a medias, {payers[1][0]} debe {money((payers[0][1] - payers[1][1]) / 2)} a {payers[0][0]}</div>
+              )}
             </div>
           )}
         </div>

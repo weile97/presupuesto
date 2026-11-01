@@ -406,3 +406,37 @@ input.chip-input { width: 120px; min-height: 40px; padding: 6px 14px; border-rad
 .news-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; font-weight: 600; line-height: 1.4; }
 .news-details { font-size: 13px; font-weight: 500; color: var(--muted); gap: 8px; }
 .news-heading { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 8px; }
+
+/* ---------- Pantalla de acceso ---------- */
+.pin-gate { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--bg); }
+.pin-gate-logo { width: 64px; height: 64px; border-radius: 18px; margin-bottom: 12px; }
+.pin-error { color: var(--red); font-size: 13px; font-weight: 700; margin-top: 10px; }
+
+/* ---------- Reparto, atajos, metas ---------- */
+.distribute-cat { display: block; margin-top: 2px; font-weight: 500; }
+.distribute-left { font-size: 13px; font-weight: 700; color: var(--muted); margin: 14px 0 0; text-align: center; }
+.distribute-left.over { color: var(--red); }
+.shortcuts { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 14px; padding: 0 16px 4px; scrollbar-width: none; }
+.shortcuts .chip { flex: 0 0 auto; white-space: nowrap; }
+.status-pill.warn { background: rgba(248, 113, 113, 0.14); color: var(--red); }
+.goal-plan { font-size: 13px; font-weight: 700; margin-top: 8px; }
+.settle-up { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 10px; }
+
+/* ---------- Deslizar movimientos ---------- */
+.tx-swipe { position: relative; border-radius: 16px; overflow: hidden; }
+.tx-swipe .tx-item { position: relative; touch-action: pan-y; transition: transform 0.18s ease; }
+.tx-swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 22px; color: #fff; border-radius: 16px; }
+.tx-swipe-bg.edit { background: var(--violet-strong); justify-content: flex-start; }
+.tx-swipe-bg.delete { background: #DC2F45; justify-content: flex-end; }
+
+/* ---------- Gráfico anual ---------- */
+.year-chart { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; height: 150px; }
+.year-col { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 0; padding: 0; background: none; border: none; cursor: pointer; }
+.year-track { flex: 1; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--border-strong); }
+.year-bar { display: block; width: min(100%, 18px); border-radius: 4px 4px 0 0; background: var(--violet-strong); opacity: 0.55; transition: opacity 0.15s ease; }
+.year-col.active .year-bar { opacity: 1; }
+.year-label { font-size: 11px; font-weight: 700; color: var(--faint); text-align: center; }
+.year-col.active .year-label { color: var(--text); }
+.year-detail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.year-detail-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; text-transform: capitalize; margin-bottom: 8px; }
+.year-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); padding: 3px 0; font-variant-numeric: tabular-nums; }
